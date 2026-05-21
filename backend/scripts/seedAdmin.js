@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import User from '../models/User.js';
+import SuperAdmin from '../models/SuperAdmin.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,17 +20,16 @@ const seedAdmin = async () => {
     const adminPassword = process.env.ADMIN_PASSWORD || '12312312';
     const adminRole = process.env.ADMIN_ROLE || 'superadmin';
 
-    const existingAdmin = await User.findOne({ email: adminEmail });
+    const existingAdmin = await SuperAdmin.findOne({ email: adminEmail });
 
     if (existingAdmin) {
       console.log('Admin already exists. Updating password...');
       existingAdmin.password = await bcrypt.hash(adminPassword, 10);
-      existingAdmin.role = adminRole;
       await existingAdmin.save();
       console.log('Admin updated successfully.');
     } else {
       const hashedPassword = await bcrypt.hash(adminPassword, 10);
-      await User.create({
+      await SuperAdmin.create({
         name: 'Super Admin',
         email: adminEmail,
         password: hashedPassword,
