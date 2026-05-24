@@ -16,6 +16,10 @@ import { hasCloudinaryConfig, initCloudinary } from './config/cloudinary.js';
 
 dotenv.config();
 
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required for authentication');
+}
+
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

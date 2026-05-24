@@ -3,7 +3,6 @@ import { Routes, Route, useNavigate } from 'react-router-dom';
 import { Menu, Bell, FileText, Upload, CheckCircle2, Clock, Loader2, ArrowRight, Plus, AlertCircle, MessageSquare, X, Trash2, Archive, RefreshCcw, Download, Pencil, Shield, DollarSign } from 'lucide-react';
 import Sidebar from '../layout/Sidebar';
 import { useAuth } from '../context/AuthContext';
-import { SERVICES } from '../services/mockData';
 import Button from '../components/Button';
 import toast from 'react-hot-toast';
 import { notificationAPI, requestAPI, serviceAPI, userAPI } from '../services/api';
@@ -105,10 +104,8 @@ function Overview({ requests, loadingRequests, onOpenRequest }) {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
-  const fallbackPopularServices = useMemo(() => SERVICES.filter((service) => service.popular), []);
-  const fallbackQuickServices = fallbackPopularServices.length > 0 ? fallbackPopularServices : SERVICES;
-  const [quickServices, setQuickServices] = useState(() => fallbackQuickServices.slice(0, 4));
-  const [hasMoreQuickServices, setHasMoreQuickServices] = useState(() => fallbackQuickServices.length > 4);
+  const [quickServices, setQuickServices] = useState([]);
+  const [hasMoreQuickServices, setHasMoreQuickServices] = useState(false);
 
   const requestRows = useMemo(() => (
     requests.map((req) => {
@@ -214,7 +211,7 @@ function Overview({ requests, loadingRequests, onOpenRequest }) {
           setHasMoreQuickServices(source.length > 4);
         }
       } catch {
-        // Keep fallback mock services when API is unavailable.
+        // Do not show dummy services when the API is unavailable.
       }
     };
 
@@ -290,32 +287,34 @@ function Overview({ requests, loadingRequests, onOpenRequest }) {
 
       <div className="dashboard-overview__insights-layout">
         <div className="dashboard-overview__insights-left">
-          <div className="dashboard-overview__quick-section">
-            <div className="dashboard-overview__quick-head">
-              <h3 className="dashboard-overview__quick-title">Popular Services</h3>
-              {hasMoreQuickServices ? (
-                <button
-                  type="button"
-                  className="dashboard-overview__quick-view-all"
-                  onClick={() => navigate('/services')}
-                >
-                  View All <ArrowRight size={14} />
-                </button>
-              ) : null}
-            </div>
-            <div className="dashboard-overview__quick-grid dashboard-overview__quick-grid--compact">
-              {quickServices.map((s) => (
-                <div key={s.id || s._id} className="dashboard-quick-card" onClick={() => navigate(`/service/${s.id || s._id}`)}>
-                  <span className="dashboard-quick-card__icon">{s.icon}</span>
-                  <div className="dashboard-quick-card__body">
-                    <p className="dashboard-quick-card__name">{s.title}</p>
-                    <p className="dashboard-quick-card__price">₹{Number(s.price || 0).toLocaleString('en-IN')}</p>
+          {quickServices.length > 0 && (
+            <div className="dashboard-overview__quick-section">
+              <div className="dashboard-overview__quick-head">
+                <h3 className="dashboard-overview__quick-title">Popular Services</h3>
+                {hasMoreQuickServices ? (
+                  <button
+                    type="button"
+                    className="dashboard-overview__quick-view-all"
+                    onClick={() => navigate('/services')}
+                  >
+                    View All <ArrowRight size={14} />
+                  </button>
+                ) : null}
+              </div>
+              <div className="dashboard-overview__quick-grid dashboard-overview__quick-grid--compact">
+                {quickServices.map((s) => (
+                  <div key={s.id || s._id} className="dashboard-quick-card" onClick={() => navigate(`/service/${s.id || s._id}`)}>
+                    <span className="dashboard-quick-card__icon">{s.icon}</span>
+                    <div className="dashboard-quick-card__body">
+                      <p className="dashboard-quick-card__name">{s.title}</p>
+                      <p className="dashboard-quick-card__price">₹{Number(s.price || 0).toLocaleString('en-IN')}</p>
+                    </div>
+                    <ArrowRight size={16} className="dashboard-quick-card__arrow" />
                   </div>
-                  <ArrowRight size={16} className="dashboard-quick-card__arrow" />
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="dashboard-overview__insights-right">

@@ -19,6 +19,9 @@ export default function Register() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [pendingEmail, setPendingEmail] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -40,6 +43,10 @@ export default function Register() {
   };
 
   const handleSubmit = async (e) => {
+    if (otpSent) {
+      return handleVerifyOtp(e);
+    }
+
     e.preventDefault();
     if (!validate()) return;
     setLoading(true);
@@ -51,25 +58,46 @@ export default function Register() {
         password: form.password,
       });
 
-      const loginResponse = await authAPI.login({
-        email: form.email.trim().toLowerCase(),
-        password: form.password,
+      setOtpSent(true);
+      setPendingEmail(form.email.trim().toLowerCase());
+      toast.success('Verification code sent to your email. Please verify to complete registration.');
+    } catch (error) {
+      const message =
+        error.response?.data?.message ||
+        'Registration failed. Please try again.';
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    if (!otp.trim()) {
+      setErrors({ ...errors, otp: 'OTP is required' });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await authAPI.verifyRegistrationOTP({
+        email: pendingEmail || form.email.trim().toLowerCase(),
+        otp: otp.trim(),
       });
 
-      const { token, user } = loginResponse.data?.data || {};
-
+      const { token, user } = response.data?.data || {};
       if (!token || !user) {
-        throw new Error('Invalid registration response');
+        throw new Error('Invalid verification response');
       }
 
       login(user, token);
       toast.success('Account created successfully!');
       navigate('/dashboard');
-
     } catch (error) {
       const message =
         error.response?.data?.message ||
-        'Registration failed. Please try again.';
+        'Verification failed. Please try again.';
       toast.error(message);
     } finally {
       setLoading(false);
@@ -241,6 +269,26 @@ export default function Register() {
               {errors.confirm && <p className="auth-error">{errors.confirm}</p>}
             </div>
 
+            {otpSent && (
+              <div className="auth-field">
+                <label className="auth-label">Verification Code</label>
+                <input
+                  type="text"
+                  className={`auth-input ${errors.otp ? 'is-error' : ''}`}
+                  placeholder="Enter OTP"
+                  value={otp}
+                  onChange={(e) => {
+                    setOtp(e.target.value);
+                    setErrors({ ...errors, otp: '' });
+                  }}
+                />
+                {errors.otp && <p className="auth-error">{errors.otp}</p>}
+                <p className="auth-note">
+                  We sent a 6-digit verification code to <strong>{pendingEmail || form.email}</strong>.
+                </p>
+              </div>
+            )}
+
             {/* TERMS */}
             <label className="auth-terms">
               <input type="checkbox" required className="auth-terms__input" />
@@ -264,7 +312,7 @@ export default function Register() {
               size="lg"
               loading={loading}
             >
-              <UserPlus size={18} /> Create Account
+              <UserPlus size={18} /> {otpSent ? 'Verify OTP' : 'Create Account'}
             </Button>
 
           </form>

@@ -5,7 +5,6 @@ import Navbar from '../layout/Navbar';
 import Footer from '../layout/Footer';
 import ServiceCard from '../components/ServiceCard';
 import Button from '../components/Button';
-import { SERVICES } from '../services/mockData';
 import { serviceAPI } from '../services/api';
 import { normalizeService } from '../services/serviceMapper';
 
@@ -31,7 +30,7 @@ const stats = [
 
 export default function Home() {
   const navigate = useNavigate();
-  const [previewServices, setPreviewServices] = useState(SERVICES.slice(0, 6));
+  const [previewServices, setPreviewServices] = useState([]);
 
   useEffect(() => {
     const fetchPreviewServices = async () => {
@@ -43,7 +42,7 @@ export default function Home() {
           setPreviewServices(items.map(normalizeService));
         }
       } catch {
-        // Fallback to static demo services when API is unavailable.
+        // Do not show dummy services when the API is unavailable.
       }
     };
 
@@ -154,24 +153,26 @@ export default function Home() {
       </section>
 
       {/* Services Preview */}
-      <section className="home-services">
-        <div className="home-container">
-          <div className="home-section-head">
-            <div>
-              <p className="home-section-eyebrow">What We Offer</p>
-              <h2 className="home-section-title">Expert CA Services<br />for Every Need</h2>
+      {previewServices.length > 0 && (
+        <section className="home-services">
+          <div className="home-container">
+            <div className="home-section-head">
+              <div>
+                <p className="home-section-eyebrow">What We Offer</p>
+                <h2 className="home-section-title">Expert CA Services<br />for Every Need</h2>
+              </div>
+              <Button variant="outline" onClick={() => navigate('/services')}>
+                View All Services <ChevronRight size={16} />
+              </Button>
             </div>
-            <Button variant="outline" onClick={() => navigate('/services')}>
-              View All Services <ChevronRight size={16} />
-            </Button>
+            <div className="home-services__grid">
+              {previewServices.map((service) => (
+                <ServiceCard key={service.id || service._id} service={service} />
+              ))}
+            </div>
           </div>
-          <div className="home-services__grid">
-            {previewServices.map((service) => (
-              <ServiceCard key={service.id || service._id} service={service} />
-            ))}
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* About */}
       <section className="home-about">

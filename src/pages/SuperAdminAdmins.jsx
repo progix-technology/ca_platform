@@ -97,7 +97,7 @@ export default function SuperAdminAdmins() {
 
 
   const handleDeleteAdmin = async (targetId) => {
-    if (targetId === user.id) {
+    if (String(targetId) === String(user.id || user._id)) {
       toast.error('You cannot delete your own account.');
       return;
     }
@@ -109,7 +109,7 @@ export default function SuperAdminAdmins() {
     setSavingId(targetId);
     try {
       await userAPI.deleteUser(targetId);
-      setUsers((prev) => prev.filter((item) => item.id !== targetId));
+      setUsers((prev) => prev.filter((item) => String(item.id) !== String(targetId)));
       toast.success('Admin deleted successfully.');
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to delete admin.');
@@ -226,7 +226,7 @@ export default function SuperAdminAdmins() {
                           </tr>
                         ) : (
                           adminUsers.map((item) => (
-                            <tr key={item._id} className="hover:bg-slate-50 transition-colors">
+                            <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                               <td className="px-6 py-4">
                                 <div className="flex items-center gap-2">
                                   <div className="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center font-semibold text-slate-600">
@@ -264,21 +264,21 @@ export default function SuperAdminAdmins() {
                                     <button
                                       className="btn btn-warning p-2"
                                       type="button"
-                                      disabled={savingId === item._id}
-                                      onClick={() => handleRevokePlan(item._id)}
+                                      disabled={savingId === item.id}
+                                      onClick={() => handleRevokePlan(item.id)}
                                       title="Revoke plan"
                                     >
-                                      {savingId === item._id ? '...' : 'Revoke'}
+                                      {savingId === item.id ? '...' : 'Revoke'}
                                     </button>
                                   )}
                                   <button
                                     className="btn btn-danger p-2"
                                     type="button"
-                                    disabled={savingId === item._id}
-                                    onClick={() => handleDeleteAdmin(item._id)}
+                                    disabled={savingId === item.id}
+                                    onClick={() => handleDeleteAdmin(item.id)}
                                     title="Delete admin"
                                   >
-                                    {savingId === item._id ? 'Deleting...' : <Trash2 size={16} />}
+                                    {savingId === item.id ? 'Deleting...' : <Trash2 size={16} />}
                                   </button>
                                 </div>
                               </td>

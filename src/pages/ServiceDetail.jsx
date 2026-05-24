@@ -4,7 +4,6 @@ import { ArrowLeft, CheckCircle2, Clock, Tag, FileText, Send, Loader2 } from 'lu
 import Navbar from '../layout/Navbar';
 import Footer from '../layout/Footer';
 import Button from '../components/Button';
-import { SERVICES } from '../services/mockData';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { requestAPI, serviceAPI, userAPI } from '../services/api';
@@ -52,20 +51,8 @@ export default function ServiceDetail() {
 
         setRelatedServices(relatedItems);
       } catch (_error) {
-        const fallback = SERVICES.find((item) => item.id === id);
-
-        if (fallback) {
-          setService(normalizeService(fallback));
-          setRelatedServices(
-            SERVICES
-              .filter((item) => item.category === fallback.category && item.id !== fallback.id)
-              .map(normalizeService)
-              .slice(0, 2),
-          );
-        } else {
-          setService(null);
-          setRelatedServices([]);
-        }
+        setService(null);
+        setRelatedServices([]);
       } finally {
         setLoadingService(false);
       }

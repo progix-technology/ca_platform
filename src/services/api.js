@@ -31,6 +31,7 @@ export default api;
 
 export const authAPI = {
   register: (payload) => api.post('/auth/register', payload),
+  verifyRegistrationOTP: (payload) => api.post('/auth/register/verify', payload),
   login: (payload) => api.post('/auth/login', payload),
 };
 
