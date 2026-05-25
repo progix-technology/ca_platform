@@ -1,3 +1,4 @@
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import express from 'express';
@@ -62,6 +63,15 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+const clientBuildPath = path.join(__dirname, '..', 'dist');
+if (process.env.NODE_ENV === 'production' && fs.existsSync(clientBuildPath)) {
+  app.use(express.static(clientBuildPath));
+  app.get('*', (req, res, next) => {
+    if (req.originalUrl.startsWith('/api')) return next();
+    res.sendFile(path.join(clientBuildPath, 'index.html'));
+  });
+}
 
 app.get('/api/health', (req, res) => {
   sendResponse(res, 200, true, 'Server is healthy', {
