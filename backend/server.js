@@ -43,7 +43,9 @@ if (hasCloudinaryConfig()) {
   console.warn('Cloudinary credentials are missing. Profile image uploads will fail until configured.');
 }
 
-const allowedOrigins = [process.env.CLIENT_URL].filter(Boolean);
+const allowedOrigins = [process.env.CLIENT_URL]
+  .filter(Boolean)
+  .map(url => url.replace(/\/$/, '')); // Remove trailing slash for consistency
 
 if (process.env.NODE_ENV === 'production' && allowedOrigins.length === 0) {
   throw new Error('CLIENT_URL must be set in production to restrict CORS access');
@@ -51,12 +53,16 @@ if (process.env.NODE_ENV === 'production' && allowedOrigins.length === 0) {
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin) return callback(null, true);
+    const normalizedOrigin = origin.replace(/\/$/, '');
+    if (allowedOrigins.includes(normalizedOrigin)) {
       return callback(null, true);
     }
     return callback(new Error('CORS policy does not allow access from this origin'));
   },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
