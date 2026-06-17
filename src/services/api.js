@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 // Fallback for production builds (Electron, etc.) where .env might not be available
-const DEFAULT_API_URL = 'https://ca-platform-backend.onrender.com/api';
+const DEFAULT_API_URL = 'https://ca-platform.onrender.com/api';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || DEFAULT_API_URL,
