@@ -43,9 +43,10 @@ if (hasCloudinaryConfig()) {
   console.warn('Cloudinary credentials are missing. Profile image uploads will fail until configured.');
 }
 
-const allowedOrigins = [process.env.CLIENT_URL]
+const allowedOrigins = (process.env.CLIENT_URL || '')
+  .split(',')
   .filter(Boolean)
-  .map(url => url.replace(/\/$/, '')); // Remove trailing slash for consistency
+  .map(url => url.trim().replace(/\/$/, '')); // Remove trailing slash for consistency
 
 if (process.env.NODE_ENV === 'production' && allowedOrigins.length === 0) {
   throw new Error('CLIENT_URL must be set in production to restrict CORS access');

@@ -24,7 +24,7 @@ export default function AdminAnalytics() {
     try {
       // In a real scenario, you'd fetch from an analytics endpoint
       // Since we don't have a dedicated one, we'll fetch all requests and process them client-side
-      const response = await requestAPI.getAllRequests();
+      const response = await requestAPI.getAll();
       const requests = response.data?.data?.items || [];
       
       processData(requests);

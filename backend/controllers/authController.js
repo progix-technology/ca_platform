@@ -8,6 +8,7 @@ import { ApiError } from '../utils/apiError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { sendResponse } from '../utils/apiResponse.js';
 import { sendEmail } from '../utils/email.js';
+import Plan from '../models/Plan.js';
 
 
 const generateToken = (user) => {
@@ -163,7 +164,7 @@ export const login = asyncHandler(async (req, res) => {
 
   // If not found in SuperAdmin, check Admin collection
   if (!user) {
-    user = await AdminUser.findOne({ email: normalizedEmail });
+    user = await AdminUser.findOne({ email: normalizedEmail }).populate('subscription.planId');
     if (user) {
       userRole = user.role; // admin
     }
@@ -201,6 +202,7 @@ export const login = asyncHandler(async (req, res) => {
       registrationNumber: user.registrationNumber || '',
       panCompliance: user.panCompliance || '',
       cin: user.cin || '',
+      subscription: user.subscription || null,
     },
   });
 });
