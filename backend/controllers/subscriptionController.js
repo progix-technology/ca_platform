@@ -30,6 +30,8 @@ export const createPlan = asyncHandler(async (req, res) => {
     allowedTiers,
     requestLimitPerMonth,
     features,
+    leadPriorityLevel,
+    hasAdvancedAnalytics,
   } = req.body;
 
   if (!name || price === undefined || duration === undefined) {
@@ -51,6 +53,8 @@ export const createPlan = asyncHandler(async (req, res) => {
     allowedTiers: Array.isArray(allowedTiers) ? allowedTiers : String(allowedTiers || '').split(',').map((item) => item.trim()).filter(Boolean),
     requestLimitPerMonth: requestLimitPerMonth === undefined ? -1 : requestLimitPerMonth,
     features: Array.isArray(features) ? features : String(features || '').split(',').map((item) => item.trim()).filter(Boolean),
+    leadPriorityLevel: leadPriorityLevel || 0,
+    hasAdvancedAnalytics: Boolean(hasAdvancedAnalytics),
   });
 
   return sendResponse(res, 201, true, 'Plan created successfully', { item: plan });

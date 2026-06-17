@@ -14,6 +14,11 @@ import {
   renewRequest,
   updateRequestComment,
   updateRequestStatus,
+  acquireRequest,
+  respondToAcquisition,
+  updateRequestPrice,
+  submitFeedback,
+  cancelRequest,
 } from '../controllers/requestController.js';
 import { protect } from '../middleware/authMiddleware.js';
 import { adminOnly } from '../middleware/adminMiddleware.js';
@@ -38,9 +43,16 @@ router.patch('/:id/comments/:commentId', protect, validateRequiredFields(['text'
 router.delete('/:id/comments/:commentId', protect, deleteRequestComment);
 router.patch('/:id/pay', protect, completeRequestPayment);
 router.patch('/:id/renew', protect, renewRequest);
+router.patch('/:id/cancel', protect, cancelRequest);
 router.patch('/:id/archive-completed', protect, adminOnly, archiveCompletedRequest);
 
+router.post('/:id/feedback', protect, validateRequiredFields(['rating', 'comment']), submitFeedback);
+
+router.post('/:id/acquire-response', protect, respondToAcquisition);
+
 router.get('/', protect, adminOnly, getAllRequests);
+router.post('/:id/acquire', protect, adminOnly, acquireRequest);
+router.patch('/:id/update-price', protect, adminOnly, updateRequestPrice);
 router.put(
   '/:id',
   protect,

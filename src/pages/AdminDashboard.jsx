@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import DynamicDocumentUpload from '../components/DynamicDocumentUpload';
 import FormBuilder from '../components/FormBuilder';
 import { useNavigate, Routes, Route, useSearchParams, Outlet } from 'react-router-dom';
-import { Menu, Users, FileText, DollarSign, TrendingUp, CheckCircle2, Clock, Loader2, Pencil, Trash2, Plus, X, RefreshCcw, Bell } from 'lucide-react';
+import { Menu, Users, FileText, DollarSign, TrendingUp, CheckCircle2, Clock, Loader2, Pencil, Trash2, Plus, X, RefreshCcw, Bell, ChevronDown, ChevronUp } from 'lucide-react';
 import Sidebar from '../layout/Sidebar';
 import { useAuth } from '../context/AuthContext';
 import AdminRenewals from './AdminRenewals';
@@ -13,6 +13,7 @@ import { requestAPI, serviceAPI, userAPI, notificationAPI } from '../services/ap
 import { normalizeService } from '../services/serviceMapper';
 import { SERVICE_CATEGORIES } from '../constants/serviceCategories';
 import Subscription from './Subscription';
+import AdminAnalytics from './AdminAnalytics';
 
 const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5050/api';
 const uploadsBaseUrl = apiBaseUrl.replace(/\/api\/?$/, '');
@@ -75,8 +76,10 @@ function StatusBadge({ status }) {
   return map[normalizedStatus] || <span className="badge bg-slate-100 text-slate-600">{status}</span>;
 }
 
-function AdminOverview({ requests, loading, totalUsersCount, loadingUsersCount }) {
+function AdminOverview({ requests, loading, totalUsersCount, loadingUsersCount, onAcquireRequest, acquiringRequestId, currentUser }) {
   const navigate = useNavigate();
+  const [acquireModal, setAcquireModal] = useState({ open: false, requestId: '', proposedTime: '', proposedPrice: '' });
+
   const pendingCount = requests.filter((request) => {
     const workflowStatus = normalizeWorkflowStatus(request.status);
     return workflowStatus === 'submitted' || workflowStatus === 'actionneeded';
@@ -105,8 +108,29 @@ function AdminOverview({ requests, loading, totalUsersCount, loadingUsersCount }
     { label: 'Pending Actions', value: String(pendingCount), icon: TrendingUp, color: 'bg-amber-50 text-amber-600', change: 'Needs review', to: '/admin/requests' },
   ];
 
+  const handleOpenAcquire = (requestId, currentPrice) => {
+    setAcquireModal({ open: true, requestId, proposedTime: '', proposedPrice: currentPrice || '' });
+  };
+
+  const handleCloseAcquire = () => {
+    setAcquireModal({ open: false, requestId: '', proposedTime: '', proposedPrice: '' });
+  };
+
+  const handleAcquireSubmit = async (e) => {
+    e.preventDefault();
+    const { requestId, proposedTime, proposedPrice } = acquireModal;
+    if (!proposedTime.trim()) {
+      toast.error('Please provide an estimated time to complete.');
+      return;
+    }
+    const success = await onAcquireRequest(requestId, proposedTime.trim(), proposedPrice);
+    if (success) {
+      handleCloseAcquire();
+    }
+  };
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 relative">
       <div>
         <h2 className="font-display text-2xl font-bold text-slate-900 mb-1">Admin Dashboard</h2>
         <p className="text-slate-500">Overview of platform activity and performance.</p>
@@ -157,37 +181,123 @@ function AdminOverview({ requests, loading, totalUsersCount, loadingUsersCount }
                 <th className="table-head">Date</th>
                 <th className="table-head">Amount</th>
                 <th className="table-head">Status</th>
+                <th className="table-head">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="table-cell text-center text-slate-500 py-8">Loading requests...</td>
+                  <td colSpan={7} className="table-cell text-center text-slate-500 py-8">Loading requests...</td>
                 </tr>
-              ) : requests.length === 0 ? (
+              ) : requests.filter(req => !['Rejected', 'Completed', 'Canceled'].includes(req.status)).length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="table-cell text-center text-slate-500 py-8">No requests found yet.</td>
+                  <td colSpan={7} className="table-cell text-center text-slate-500 py-8">No active requests found yet.</td>
                 </tr>
               ) : (
-                requests.slice(0, 5).map((req) => (
-                  <tr
-                    key={req._id}
-                    onClick={() => navigate('/admin/requests')}
-                    className="hover:bg-slate-50 transition-colors cursor-pointer"
-                  >
-                    <td className="table-cell font-mono text-xs text-slate-500">REQ-{req._id.slice(-6).toUpperCase()}</td>
-                    <td className="table-cell font-medium text-slate-800">{req.user?.name || 'Unknown User'}</td>
-                    <td className="table-cell text-slate-600">{req.service?.title || 'N/A'}</td>
-                    <td className="table-cell">{new Date(req.createdAt).toLocaleDateString('en-IN')}</td>
-                    <td className="table-cell font-semibold">₹{Number(req.service?.price || 0).toLocaleString('en-IN')}</td>
-                    <td className="table-cell"><StatusBadge status={req.status} /></td>
-                  </tr>
-                ))
+                requests.filter(req => !['Rejected', 'Completed', 'Canceled'].includes(req.status)).slice(0, 5).map((req) => {
+                  const isUnacquired = req.acquireStatus === 'unacquired';
+                  const currentUserIdStr = String(currentUser?._id || currentUser?.id || '');
+                  const assignedToId = typeof req.assignedTo === 'object' && req.assignedTo !== null
+                    ? String(req.assignedTo._id || '')
+                    : String(req.assignedTo || '');
+                  const isLockedForMe = Boolean(assignedToId && assignedToId !== currentUserIdStr);
+                  const rowClass = isUnacquired
+                    ? "hover:bg-indigo-50 transition-colors cursor-pointer bg-indigo-50/40 relative overflow-hidden"
+                    : isLockedForMe
+                      ? "bg-slate-50 opacity-75 cursor-not-allowed"
+                      : "hover:bg-slate-50 transition-colors cursor-pointer";
+                  return (
+                    <tr
+                      key={req._id}
+                      onClick={() => {
+                        if (!isLockedForMe) {
+                          navigate('/admin/requests');
+                        }
+                      }}
+                      className={rowClass}
+                    >
+                      <td className="table-cell font-mono text-xs text-slate-500">
+                        {isUnacquired && <span className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 animate-pulse"></span>}
+                        REQ-{req._id.slice(-6).toUpperCase()}
+                      </td>
+                      <td className="table-cell font-medium text-slate-800">{req.user?.name || 'Unknown User'}</td>
+                      <td className="table-cell text-slate-600">{req.service?.title || 'N/A'}</td>
+                      <td className="table-cell">{new Date(req.createdAt).toLocaleDateString('en-IN')}</td>
+                      <td className="table-cell font-semibold">₹{Number(req.service?.price || 0).toLocaleString('en-IN')}</td>
+                      <td className="table-cell"><StatusBadge status={req.status} /></td>
+                      <td className="table-cell">
+                        {isUnacquired ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenAcquire(req._id, req.service?.price);
+                            }}
+                            disabled={acquiringRequestId === req._id}
+                            className="px-2.5 py-1 text-xs rounded-lg border border-indigo-200 text-white bg-indigo-600 hover:bg-indigo-700 transition-colors font-medium animate-pulse shadow-sm shadow-indigo-200"
+                          >
+                            {acquiringRequestId === req._id ? 'Acquiring...' : 'Acquire Now'}
+                          </button>
+                        ) : req.acquireStatus === 'pending_user_approval' ? (
+                          <span className={`px-2.5 py-1 text-[10px] uppercase font-bold tracking-wider rounded-md border ${assignedToId === currentUserIdStr ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>
+                            {assignedToId === currentUserIdStr ? 'Pending' : 'Acquired'}
+                          </span>
+                        ) : !isLockedForMe ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate('/admin/requests');
+                            }}
+                            className="px-2.5 py-1 text-xs rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 transition-colors font-medium"
+                          >
+                            Review
+                          </button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Acquire modal for Admin Overview */}
+      {acquireModal.open && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-30">
+          <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-sm border border-slate-200">
+            <h3 className="font-bold text-lg mb-2 text-indigo-700">Acquire Request</h3>
+            <form onSubmit={handleAcquireSubmit}>
+              <label className="block mb-2 text-sm font-medium text-slate-700">Estimated Time to Complete *</label>
+              <input
+                type="text"
+                className="w-full border border-slate-300 rounded-lg p-2 mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                value={acquireModal.proposedTime}
+                onChange={e => setAcquireModal(m => ({ ...m, proposedTime: e.target.value }))}
+                placeholder="e.g. 3 Days"
+                required
+              />
+              
+              <label className="block mb-2 text-sm font-medium text-slate-700">Proposed Price (₹) (Optional)</label>
+              <input
+                type="number"
+                className="w-full border border-slate-300 rounded-lg p-2 mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                value={acquireModal.proposedPrice}
+                onChange={e => setAcquireModal(m => ({ ...m, proposedPrice: e.target.value }))}
+                placeholder="e.g. 999"
+              />
+              <div className="flex gap-2 justify-end">
+                <button type="button" onClick={handleCloseAcquire} className="px-4 py-1 rounded-lg border border-slate-200 text-slate-700 bg-slate-50 hover:bg-slate-100">Cancel</button>
+                <button type="submit" disabled={acquiringRequestId === acquireModal.requestId} className="px-4 py-1 rounded-lg border border-indigo-200 text-white bg-indigo-600 hover:bg-indigo-700 font-semibold disabled:opacity-50">
+                  {acquiringRequestId === acquireModal.requestId ? 'Submitting...' : 'Propose'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -196,11 +306,13 @@ function ManageRequests({
   requests,
   loading,
   onUpdateStatus,
+  onAcquireRequest,
   onAddComment,
   onUpdateComment,
   onDeleteComment,
   onSaveToCompletedList,
   updatingRequestId,
+  acquiringRequestId,
   savingCompletedRequestId,
   commentingRequestId,
   editingCommentKey,
@@ -420,8 +532,12 @@ function ManageRequests({
     commentId: '',
     text: '',
   });
+  // Acquire modal state
+  const [acquireModal, setAcquireModal] = useState({ open: false, requestId: '', proposedTime: '', proposedPrice: '' });
   // Reject modal state
   const [rejectModal, setRejectModal] = useState({ open: false, requestId: '', message: '' });
+  // Update Price modal state
+  const [updatePriceModal, setUpdatePriceModal] = useState({ open: false, requestId: '', proposedPrice: '' });
   const currentUserId = String(currentUser?._id || currentUser?.id || '');
 
   const formatDateTime = (value) => (value ? new Date(value).toLocaleString('en-IN') : '-');
@@ -480,6 +596,55 @@ function ManageRequests({
     }
     await onUpdateStatus(requestId, 'Rejected', message.trim());
     setRejectModal({ open: false, requestId: '', message: '' });
+  };
+
+  // Handle acquire logic
+  const handleOpenAcquire = (requestId, currentPrice) => {
+    setAcquireModal({ open: true, requestId, proposedTime: '', proposedPrice: currentPrice || '' });
+  };
+
+  const handleCloseAcquire = () => {
+    setAcquireModal({ open: false, requestId: '', proposedTime: '', proposedPrice: '' });
+  };
+
+  const handleAcquireSubmit = async (e) => {
+    e.preventDefault();
+    const { requestId, proposedTime, proposedPrice } = acquireModal;
+    if (!proposedTime.trim()) {
+      toast.error('Please provide an estimated time to complete.');
+      return;
+    }
+    const success = await onAcquireRequest(requestId, proposedTime.trim(), proposedPrice);
+    if (success) {
+      handleCloseAcquire();
+    }
+  };
+
+  // Handle update price logic
+  const handleOpenUpdatePrice = (requestId, currentPrice) => {
+    setUpdatePriceModal({ open: true, requestId, proposedPrice: currentPrice || '' });
+  };
+
+  const handleCloseUpdatePrice = () => {
+    setUpdatePriceModal({ open: false, requestId: '', proposedPrice: '' });
+  };
+
+  const handleUpdatePriceSubmit = async (e) => {
+    e.preventDefault();
+    const { requestId, proposedPrice } = updatePriceModal;
+    if (!proposedPrice) {
+      toast.error('Please provide a new proposed price.');
+      return;
+    }
+    
+    try {
+      await requestAPI.updatePrice(requestId, { proposedPrice });
+      toast.success('Proposed price updated successfully');
+      handleCloseUpdatePrice();
+      window.location.reload(); // Quick refresh to show updated data
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to update price');
+    }
   };
 
   const handleAddInternalNote = async (requestId) => {
@@ -658,6 +823,7 @@ function ManageRequests({
                 <th className="table-head">Amount</th>
                 <th className="table-head">Status</th>
                 <th className="table-head">Actions</th>
+                <th className="table-head w-10"></th>
               </tr>
             </thead>
 
@@ -699,10 +865,15 @@ function ManageRequests({
                   const comments = Array.isArray(req.comments)
                     ? [...req.comments].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
                     : [];
+                  
+                  const assignedToId = typeof req.assignedTo === 'object' && req.assignedTo !== null 
+                    ? String(req.assignedTo._id || '') 
+                    : String(req.assignedTo || '');
+                  const isLockedForMe = Boolean(assignedToId && assignedToId !== currentUserId);
 
                   return (
                     <Fragment key={requestId}>
-                      <tr className="hover:bg-slate-50 transition-colors">
+                      <tr className={`transition-colors ${isLockedForMe ? 'bg-slate-50 opacity-75' : 'hover:bg-slate-50'}`}>
                         <td className="table-cell font-mono text-xs text-slate-500">REQ-{requestId.slice(-6).toUpperCase()}</td>
                         <td className="table-cell font-medium text-slate-800">{req.user?.name || 'Unknown User'}</td>
                         <td className="table-cell text-slate-600">{req.service?.title || 'N/A'}</td>
@@ -710,23 +881,30 @@ function ManageRequests({
                         <td className="table-cell"><StatusBadge status={req.status} /></td>
                         <td className="table-cell">
                           <div className="flex gap-1 flex-wrap items-center">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (workflowStatus === 'completed') {
-                                  detailsRequest?._id === req._id ? closeDetailsModal() : openDetailsModal(req);
-                                } else {
-                                  toggleReviewPanel(requestId);
-                                }
-                              }}
-                              className="px-2.5 py-1 text-xs rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 transition-colors font-medium"
-                            >
-                              {workflowStatus === 'completed'
-                                ? (detailsRequest?._id === req._id ? 'Close' : 'Details')
-                                : (isExpanded ? 'Close' : 'Review')}
-                            </button>
+                            {req.acquireStatus === 'unacquired' && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenAcquire(requestId, req.service?.price)}
+                                disabled={isUpdating || acquiringRequestId === requestId}
+                                className="px-2.5 py-1 text-xs rounded-lg border border-indigo-200 text-white bg-indigo-600 hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {acquiringRequestId === requestId ? 'Acquiring...' : 'Acquire'}
+                              </button>
+                            )}
 
-                            {workflowStatus === 'completed' && req.renewalRequested && (
+                            {req.acquireStatus === 'pending_user_approval' && assignedToId !== currentUserId && (
+                              <span className="px-2.5 py-1 text-[10px] uppercase font-bold tracking-wider rounded-md border border-rose-200 bg-rose-50 text-rose-700">
+                                Acquired
+                              </span>
+                            )}
+
+                            {req.acquireStatus === 'pending_user_approval' && assignedToId === currentUserId && (
+                              <span className="px-2.5 py-1 text-[10px] uppercase font-bold tracking-wider rounded-md border border-amber-200 bg-amber-50 text-amber-700">
+                                Pending User Approval
+                              </span>
+                            )}
+
+                            {workflowStatus === 'completed' && req.renewalRequested && !isLockedForMe && (
                               <button
                                 type="button"
                                 onClick={() => openRenewPopup(req)}
@@ -736,7 +914,7 @@ function ManageRequests({
                               </button>
                             )}
 
-                            {workflowStatus === 'submitted' && (
+                            {workflowStatus === 'submitted' && req.acquireStatus === 'approved' && !isLockedForMe && (
                               <button
                                 onClick={() => handleStartReview(requestId)}
                                 disabled={isUpdating}
@@ -746,14 +924,21 @@ function ManageRequests({
                               </button>
                             )}
 
-                            {workflowStatus === 'inreview' && (
+                            {workflowStatus === 'inreview' && !isLockedForMe && (
                               <>
+                                <button
+                                  onClick={() => handleOpenUpdatePrice(requestId, req.proposedPrice || req.service?.price)}
+                                  disabled={isUpdating}
+                                  className="px-2.5 py-1 text-xs rounded-lg border border-purple-200 text-purple-700 hover:bg-purple-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Update Price
+                                </button>
                                 <button
                                   onClick={() => handleApprove(requestId)}
                                   disabled={isUpdating}
                                   className="px-2.5 py-1 text-xs rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                  {isUpdating ? 'Updating...' : 'Approve'}
+                                  {isUpdating ? 'Updating...' : 'Approve Details (Request Payment)'}
                                 </button>
                                 <button
                                   onClick={() => handleOpenReject(requestId)}
@@ -766,7 +951,7 @@ function ManageRequests({
                             )}
 
                             {/* Unreject button for rejected requests */}
-                            {workflowStatus === 'rejected' && (
+                            {workflowStatus === 'rejected' && !req.statusTimeline?.some(t => t.status === 'Rejected' && t.note === 'services canceled by user') && (
                               <button
                                 onClick={() => onUpdateStatus(requestId, 'In Review')}
                                 disabled={isUpdating}
@@ -779,6 +964,13 @@ function ManageRequests({
                             {workflowStatus === 'actionneeded' && (
                               <>
                                 <button
+                                  onClick={() => handleOpenUpdatePrice(requestId, req.proposedPrice || req.service?.price)}
+                                  disabled={isUpdating}
+                                  className="px-2.5 py-1 text-xs rounded-lg border border-purple-200 text-purple-700 hover:bg-purple-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Update Price
+                                </button>
+                                <button
                                   onClick={() => handleResumeReview(requestId)}
                                   disabled={isUpdating}
                                   className="px-2.5 py-1 text-xs rounded-lg border border-indigo-200 text-indigo-700 hover:bg-indigo-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
@@ -790,7 +982,7 @@ function ManageRequests({
                                   disabled={isUpdating}
                                   className="px-2.5 py-1 text-xs rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                  {isUpdating ? 'Updating...' : 'Approve'}
+                                  {isUpdating ? 'Updating...' : 'Approve Details (Request Payment)'}
                                 </button>
                               </>
                             )}
@@ -959,13 +1151,90 @@ function ManageRequests({
                               </div>
                             </div>
                           )}
+
+                          {/* Acquire modal */}
+                          {acquireModal.open && acquireModal.requestId === requestId && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
+                              <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-sm border border-slate-200">
+                                <h3 className="font-bold text-lg mb-2 text-indigo-700">Acquire Request</h3>
+                                <form onSubmit={handleAcquireSubmit}>
+                                  <label className="block mb-2 text-sm font-medium text-slate-700">Estimated Time to Complete *</label>
+                                  <input
+                                    type="text"
+                                    className="w-full border border-slate-300 rounded-lg p-2 mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                                    value={acquireModal.proposedTime}
+                                    onChange={e => setAcquireModal(m => ({ ...m, proposedTime: e.target.value }))}
+                                    placeholder="e.g. 3 Days"
+                                    required
+                                  />
+                                  
+                                  <label className="block mb-2 text-sm font-medium text-slate-700">Proposed Price (₹) (Optional)</label>
+                                  <input
+                                    type="number"
+                                    className="w-full border border-slate-300 rounded-lg p-2 mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                                    value={acquireModal.proposedPrice}
+                                    onChange={e => setAcquireModal(m => ({ ...m, proposedPrice: e.target.value }))}
+                                    placeholder="e.g. 999"
+                                  />
+                                  <div className="flex gap-2 justify-end">
+                                    <button type="button" onClick={handleCloseAcquire} className="px-4 py-1 rounded-lg border border-slate-200 text-slate-700 bg-slate-50 hover:bg-slate-100">Cancel</button>
+                                    <button type="submit" disabled={acquiringRequestId === requestId} className="px-4 py-1 rounded-lg border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 font-semibold disabled:opacity-50">
+                                      {acquiringRequestId === requestId ? 'Submitting...' : 'Propose'}
+                                    </button>
+                                  </div>
+                                </form>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Update Price modal */}
+                          {updatePriceModal.open && updatePriceModal.requestId === requestId && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
+                              <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-sm border border-slate-200">
+                                <h3 className="font-bold text-lg mb-2 text-purple-700">Update Proposed Price</h3>
+                                <form onSubmit={handleUpdatePriceSubmit}>
+                                  <label className="block mb-2 text-sm font-medium text-slate-700">New Proposed Price (₹)</label>
+                                  <input
+                                    type="number"
+                                    className="w-full border border-slate-300 rounded-lg p-2 mb-4 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                                    value={updatePriceModal.proposedPrice}
+                                    onChange={e => setUpdatePriceModal(m => ({ ...m, proposedPrice: e.target.value }))}
+                                    placeholder="e.g. 999"
+                                    required
+                                  />
+                                  <div className="flex gap-2 justify-end">
+                                    <button type="button" onClick={handleCloseUpdatePrice} className="px-4 py-1 rounded-lg border border-slate-200 text-slate-700 bg-slate-50 hover:bg-slate-100">Cancel</button>
+                                    <button type="submit" className="px-4 py-1 rounded-lg border border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100 font-semibold">Update</button>
+                                  </div>
+                                </form>
+                              </div>
+                            </div>
+                          )}
                           </div>
+                        </td>
+                        <td className="table-cell text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (workflowStatus === 'completed') {
+                                detailsRequest?._id === req._id ? closeDetailsModal() : openDetailsModal(req);
+                              } else {
+                                toggleReviewPanel(requestId);
+                              }
+                            }}
+                            disabled={isLockedForMe}
+                            className={`p-1.5 rounded-md hover:bg-slate-200 transition-colors ${isLockedForMe ? 'opacity-50 cursor-not-allowed' : 'text-slate-500'}`}
+                          >
+                            {isExpanded || (workflowStatus === 'completed' && detailsRequest?._id === req._id) 
+                              ? <ChevronUp size={18} /> 
+                              : <ChevronDown size={18} />}
+                          </button>
                         </td>
                       </tr>
 
-                      {isExpanded && (
+                      {isExpanded && !isLockedForMe && (
                         <tr className="bg-slate-50/60">
-                          <td colSpan={6} className="p-4">
+                          <td colSpan={7} className="p-4">
                             <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
                               <div className="grid gap-4 lg:grid-cols-2">
                                 <div>
@@ -1166,7 +1435,7 @@ function ManageRequests({
                               </div>
 
                               <div className="grid gap-4 lg:grid-cols-3 border-t border-slate-200 pt-4">
-                                {(workflowStatus === 'inreview' || workflowStatus === 'submitted') && (
+                                {(workflowStatus === 'inreview' || (workflowStatus === 'submitted' && req.acquireStatus === 'approved')) && (
                                   <div>
                                     <label className="label">Move To Action Needed</label>
                                     <textarea
@@ -1523,282 +1792,6 @@ function ManageRequests({
   );
 }
 
-function ManageServices() {
-  const [services, setServices] = useState([]);
-  const [loadingServices, setLoadingServices] = useState(true);
-  const [savingService, setSavingService] = useState(false);
-  const [deletingServiceId, setDeletingServiceId] = useState(null);
-  const [showModal, setShowModal] = useState(false);
-  const [editingServiceId, setEditingServiceId] = useState(null);
-  const [showFormBuilder, setShowFormBuilder] = useState(false);
-  const [formSchemaDraft, setFormSchemaDraft] = useState({});
-  const [editingFormServiceId, setEditingFormServiceId] = useState(null);
-  const [form, setForm] = useState({
-    title: '',
-    description: '',
-    price: '',
-    category: SERVICE_CATEGORIES[0],
-    documentsRequired: '',
-    formSchema: {},
-    planTier: 'basic',
-  });
-
-  useEffect(() => {
-    const fetchServices = async () => {
-      setLoadingServices(true);
-
-      try {
-        const response = await serviceAPI.getAll({ page: 1, limit: 200 });
-        const items = response.data?.data?.items || [];
-        setServices(items.map(normalizeService));
-      } catch (error) {
-        const message = error.response?.data?.message || 'Failed to load services.';
-        toast.error(message);
-      } finally {
-        setLoadingServices(false);
-      }
-    };
-
-    fetchServices();
-  }, []);
-
-  const openAdd = () => {
-    setEditingServiceId(null);
-    setForm({ title: '', description: '', price: '', category: SERVICE_CATEGORIES[0], documentsRequired: '', planTier: 'basic' });
-    setShowModal(true);
-  };
-
-  const openEdit = (service) => {
-    setEditingServiceId(service.id);
-    setForm({
-      title: service.title,
-      description: service.description,
-      price: String(service.price),
-      category: service.category,
-      documentsRequired: service.documents.join(', '),
-      formSchema: service.formSchema || {},
-      planTier: service.planTier || 'basic',
-    });
-    setShowModal(true);
-  };
-
-
-
-
-  const openFormBuilder = (service) => {
-    setEditingFormServiceId(service.id);
-    setFormSchemaDraft(service.formSchema || {});
-    setShowFormBuilder(true);
-  };
-
-  // Sync formSchemaDraft to main form state when saving
-  const handleFormBuilderSave = async () => {
-    try {
-      await serviceAPI.update(editingFormServiceId, { formSchema: formSchemaDraft });
-      setForm(f => ({ ...f, formSchema: formSchemaDraft }));
-      // Refresh services list
-      const response = await serviceAPI.getAll({ page: 1, limit: 200 });
-      const items = response.data?.data?.items || [];
-      setServices(items.map(normalizeService));
-      toast.success('Form schema updated!');
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to update form schema.');
-    } finally {
-      setShowFormBuilder(false);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!form.title.trim() || !form.description.trim() || !form.price) {
-      toast.error('Fill all required fields');
-      return;
-    }
-
-    const payload = {
-      title: form.title.trim(),
-      description: form.description.trim(),
-      price: Number(form.price),
-      category: form.category,
-      documentsRequired: form.documentsRequired
-        .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean),
-      formSchema: form.formSchema || {},
-      planTier: form.planTier || 'basic',
-    };
-
-    setSavingService(true);
-
-    try {
-      if (editingServiceId) {
-        const response = await serviceAPI.update(editingServiceId, payload);
-        const updated = normalizeService(response.data?.data?.service);
-        setServices((prev) => prev.map((service) => (service.id === editingServiceId ? updated : service)));
-        toast.success('Service updated!');
-      } else {
-        const response = await serviceAPI.create(payload);
-        const created = normalizeService(response.data?.data?.service);
-        setServices((prev) => [created, ...prev]);
-        toast.success('Service added!');
-      }
-
-      setShowModal(false);
-    } catch (error) {
-      const message = error.response?.data?.message || 'Failed to save service.';
-      toast.error(message);
-    } finally {
-      setSavingService(false);
-    }
-  };
-
-  const handleDelete = async (serviceId) => {
-    const shouldDelete = window.confirm('Delete this service? This action cannot be undone.');
-    if (!shouldDelete) {
-      return;
-    }
-
-    setDeletingServiceId(serviceId);
-
-    try {
-      await serviceAPI.remove(serviceId);
-      setServices((prev) => prev.filter((service) => service.id !== serviceId));
-      toast.success('Service deleted');
-    } catch (error) {
-      const message = error.response?.data?.message || 'Failed to delete service.';
-      toast.error(message);
-    } finally {
-      setDeletingServiceId(null);
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="font-display text-2xl font-bold text-slate-900">Manage Services</h2>
-        <Button variant="primary" size="sm" onClick={openAdd}><Plus size={16} /> Add Service</Button>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-        {loadingServices ? (
-          <div className="col-span-full text-center py-16 text-slate-500">Loading services...</div>
-        ) : services.length === 0 ? (
-          <div className="col-span-full text-center py-16 text-slate-500">No services found. Add your first service.</div>
-        ) : services.map((s) => (
-          <div key={s.id} className="card p-5">
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">{s.icon}</span>
-                <div>
-                  <h3 className="font-semibold text-slate-800">{s.title}</h3>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    <span className="text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full uppercase font-bold">{s.category}</span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase font-bold ${
-                      s.planTier === 'premium' ? 'bg-amber-100 text-amber-700' :
-                      s.planTier === 'pro' ? 'bg-indigo-100 text-indigo-700' :
-                      'bg-emerald-100 text-emerald-700'
-                    }`}>
-                      {s.planTier || 'Basic'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <p className="text-slate-500 text-sm mb-3 line-clamp-2">{s.description}</p>
-            <div className="flex items-center justify-between">
-              <p className="font-display font-bold text-primary-800">₹{s.price.toLocaleString('en-IN')}</p>
-              <div className="flex gap-2">
-                <button onClick={() => openEdit(s)} className="p-2 text-slate-500 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors">
-                  <Pencil size={15} />
-                </button>
-                <button
-                  onClick={() => openFormBuilder(s)}
-                  className="p-2 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
-                  title="Edit Form"
-                >
-                  📝
-                </button>
-                <button disabled={deletingServiceId === s.id} onClick={() => handleDelete(s.id)} className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                  {deletingServiceId === s.id ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
-                </button>
-                    {/* Form Builder Modal */}
-                    {showFormBuilder && (
-                      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-white/40 backdrop-blur-[6px]">
-                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-                          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-                            <h3 className="font-display font-bold text-slate-900">Edit Form Schema</h3>
-                            <button onClick={() => setShowFormBuilder(false)} className="p-2 hover:bg-slate-100 rounded-lg"><X size={18} /></button>
-                          </div>
-                          <div className="p-6 space-y-4">
-                            {/* FormBuilder visual component for schema editing */}
-                            <FormBuilder
-                              value={formSchemaDraft}
-                              onChange={setFormSchemaDraft}
-                            />
-                            <div className="flex gap-3 pt-2">
-                              <Button
-                                variant="primary"
-                                className="flex-1 justify-center"
-                                onClick={handleFormBuilderSave}
-                              >
-                                Save Form
-                              </Button>
-                              <Button variant="outline" onClick={() => setShowFormBuilder(false)}>Cancel</Button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-fade-in-up">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-              <h3 className="font-display font-bold text-slate-900">{editingServiceId ? 'Edit Service' : 'Add New Service'}</h3>
-              <button onClick={() => setShowModal(false)} className="p-2 hover:bg-slate-100 rounded-lg"><X size={18} /></button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <label className="label">Service Title *</label>
-                  <input className="input-field" placeholder="e.g. ITR Filing" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-                </div>
-                <div>
-                  <label className="label">Category</label>
-                  <select className="input-field" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-                    {SERVICE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Price (₹) *</label>
-                  <input type="number" className="input-field" placeholder="999" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
-                </div>
-                <div className="col-span-2">
-                  <label className="label">Description *</label>
-                  <textarea className="input-field resize-none" rows={3} placeholder="Short service description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-                </div>
-                <div className="col-span-2">
-                  <label className="label">Documents Required (comma separated)</label>
-                  <input className="input-field" placeholder="PAN Card, Aadhaar Card, Bank Statement" value={form.documentsRequired} onChange={(e) => setForm({ ...form, documentsRequired: e.target.value })} />
-                </div>
-              </div>
-              <div className="flex gap-3 pt-2">
-                <Button variant="primary" className="flex-1 justify-center" onClick={handleSave} loading={savingService}>{editingServiceId ? 'Save Changes' : 'Add Service'}</Button>
-                <Button variant="outline" onClick={() => setShowModal(false)}>Cancel</Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function AdminUsers({ requests }) {
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
@@ -2085,7 +2078,9 @@ export default function AdminDashboard() {
   const [loadingArchivedCompleted, setLoadingArchivedCompleted] = useState(true);
   const [loadingUsersCount, setLoadingUsersCount] = useState(true);
   const [updatingRequestId, setUpdatingRequestId] = useState(null);
+  const [acquiringRequestId, setAcquiringRequestId] = useState(null);
   const [savingCompletedRequestId, setSavingCompletedRequestId] = useState(null);
+  const [subscriptionPrompt, setSubscriptionPrompt] = useState({ open: false, message: '' });
   const [commentingRequestId, setCommentingRequestId] = useState(null);
   const [editingCommentKey, setEditingCommentKey] = useState('');
   const [deletingCommentKey, setDeletingCommentKey] = useState('');
@@ -2097,8 +2092,10 @@ export default function AdminDashboard() {
   const adminAccessErrorShown = useRef(false); // Use ref to prevent re-renders
   const { user } = useAuth();
 
-  const fetchRequests = async () => {
-    setLoadingRequests(true);
+  const fetchRequests = async (showLoader = true) => {
+    if (showLoader) {
+      setLoadingRequests(true);
+    }
 
     try {
       const response = await requestAPI.getAll();
@@ -2196,7 +2193,7 @@ export default function AdminDashboard() {
 
     const liveRefreshInterval = setInterval(() => {
       if (!adminAccessErrorShown.current) {
-        fetchRequests();
+        fetchRequests(false);
         fetchTotalUsersCount();
       }
     }, 15000); // Refresh stats every 15 seconds to stay in sync with backend
@@ -2301,6 +2298,30 @@ export default function AdminDashboard() {
       return false;
     } finally {
       setUpdatingRequestId(null);
+    }
+  };
+
+  const acquireRequestData = async (requestId, proposedTime, proposedPrice) => {
+    setAcquiringRequestId(requestId);
+    try {
+      const response = await requestAPI.acquire(requestId, { proposedTime, proposedPrice });
+      const updatedRequest = response.data?.data?.request;
+      setRequests((prev) => prev.map((request) => {
+        if (request._id !== requestId) return request;
+        return updatedRequest || { ...request, acquireStatus: 'pending_user_approval', assignedTo: user._id };
+      }));
+      toast.success('Request acquired successfully');
+      return true;
+    } catch (error) {
+      const message = error.response?.data?.message || 'Failed to acquire request.';
+      if (error.response?.status === 403 && (message.toLowerCase().includes('subscription') || message.toLowerCase().includes('plan limit'))) {
+        setSubscriptionPrompt({ open: true, message });
+      } else {
+        toast.error(message);
+      }
+      return false;
+    } finally {
+      setAcquiringRequestId(null);
     }
   };
 
@@ -2524,6 +2545,9 @@ export default function AdminDashboard() {
                   loading={loadingRequests}
                   totalUsersCount={totalUsersCount}
                   loadingUsersCount={loadingUsersCount}
+                  onAcquireRequest={acquireRequestData}
+                  acquiringRequestId={acquiringRequestId}
+                  currentUser={user}
                 />
               )}
             />
@@ -2534,11 +2558,13 @@ export default function AdminDashboard() {
                   requests={requests}
                   loading={loadingRequests}
                   onUpdateStatus={updateRequestStatus}
+                  onAcquireRequest={acquireRequestData}
                   onAddComment={addRequestComment}
                   onUpdateComment={updateRequestComment}
                   onDeleteComment={deleteRequestComment}
                   onSaveToCompletedList={saveCompletedRequestToList}
                   updatingRequestId={updatingRequestId}
+                  acquiringRequestId={acquiringRequestId}
                   savingCompletedRequestId={savingCompletedRequestId}
                   commentingRequestId={commentingRequestId}
                   editingCommentKey={editingCommentKey}
@@ -2547,7 +2573,7 @@ export default function AdminDashboard() {
                 />
               )}
             />
-            <Route path="services" element={<ManageServices />} />
+            
             <Route path="users" element={<AdminUsers requests={requests} />} />
             <Route
               path="completed-list"
@@ -2569,10 +2595,40 @@ export default function AdminDashboard() {
               )}
             />
             <Route path="subscription" element={<Subscription />} />
+            <Route path="analytics" element={<AdminAnalytics />} />
             <Route path="settings" element={<AdminSettings />} />
           </Routes>
         </main>
       </div>
+      {/* Subscription Prompt Modal */}
+      {subscriptionPrompt.open && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div className="p-6">
+              <h3 className="text-xl font-bold text-rose-600 mb-2">Subscription Action Required</h3>
+              <p className="text-slate-600 mb-6">{subscriptionPrompt.message}</p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setSubscriptionPrompt({ open: false, message: '' })}
+                  className="px-4 py-2 rounded-xl text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setSubscriptionPrompt({ open: false, message: '' });
+                    window.location.hash = '#/admin/settings'; // Go to settings which renders Subscription
+                  }}
+                  className="px-4 py-2 rounded-xl text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+                >
+                  Upgrade Plan
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

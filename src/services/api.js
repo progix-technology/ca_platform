@@ -1,10 +1,11 @@
 // Removed stray line causing syntax error
 import axios from 'axios';
 
-
+// Fallback for production builds (Electron, etc.) where .env might not be available
+const DEFAULT_API_URL = 'https://ca-platform-backend.onrender.com/api';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL: import.meta.env.VITE_API_URL || DEFAULT_API_URL,
   headers: { 'Content-Type': 'application/json' },
   withCredentials: true,
 });
@@ -67,9 +68,14 @@ export const requestAPI = {
   addComment: (requestId, payload) => api.post(`/requests/${requestId}/comments`, payload),
   updateComment: (requestId, commentId, payload) => api.patch(`/requests/${requestId}/comments/${commentId}`, payload),
   deleteComment: (requestId, commentId) => api.delete(`/requests/${requestId}/comments/${commentId}`),
+  cancel: (requestId) => api.patch(`/requests/${requestId}/cancel`),
   archiveCompleted: (requestId) => api.patch(`/requests/${requestId}/archive-completed`),
   renew: (requestId) => api.patch(`/requests/${requestId}/renew`),
   completePayment: (requestId, payload = {}) => api.patch(`/requests/${requestId}/pay`, payload),
+  acquire: (requestId, payload) => api.post(`/requests/${requestId}/acquire`, payload),
+  respondToAcquisition: (requestId, payload) => api.post(`/requests/${requestId}/acquire-response`, payload),
+  submitFeedback: (requestId, payload) => api.post(`/requests/${requestId}/feedback`, payload),
+  updatePrice: (requestId, payload) => api.patch(`/requests/${requestId}/update-price`, payload),
 };
 
 export const serviceAPI = {

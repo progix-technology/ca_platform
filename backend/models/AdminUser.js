@@ -99,12 +99,23 @@ const adminSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    feedbacks: [
+      {
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        userName: String,
+        requestId: { type: mongoose.Schema.Types.ObjectId, ref: 'Request' },
+        serviceName: String,
+        rating: { type: Number, required: true, min: 1, max: 5 },
+        comment: { type: String, required: true },
+        createdAt: { type: Date, default: Date.now },
+      }
+    ],
   },
   {
     timestamps: true,
   }
 );
 
-const Admin = mongoose.model('Admin', adminSchema);
+const AdminUser = mongoose.model('AdminUser', adminSchema);
 
-export default Admin;
+export default AdminUser;

@@ -23,6 +23,8 @@ export function AuthProvider({ children }) {
 
     try {
       setUser(JSON.parse(stored));
+      // Async fetch latest data so the user context is always in sync with DB
+      refreshUser();
     } catch {
       localStorage.removeItem('token');
       localStorage.removeItem('user');

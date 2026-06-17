@@ -16,18 +16,20 @@ export const protect = asyncHandler(async (req, _res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
+
     // Check in User collection first
     let user = await User.findById(decoded.id).select('-password');
-    
+
     // If not found, check SuperAdmin collection
     if (!user) {
       user = await SuperAdmin.findById(decoded.id).select('-password');
     }
-    
+
     // If not found, check AdminUser collection
     if (!user) {
-      user = await AdminUser.findById(decoded.id).select('-password');
+      user = await AdminUser.findById(decoded.id)
+        .select('-password')
+        .populate('subscription.planId');
     }
 
     if (!user) {

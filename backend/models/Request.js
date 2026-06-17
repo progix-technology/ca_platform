@@ -81,6 +81,19 @@ const requestSchema = new mongoose.Schema(
       ref: 'AdminUser',
       default: null,
     },
+    acquireStatus: {
+      type: String,
+      enum: ['unacquired', 'pending_user_approval', 'approved'],
+      default: 'unacquired',
+    },
+    proposedTime: {
+      type: String,
+      default: '',
+    },
+    proposedPrice: {
+      type: Number,
+      default: null,
+    },
     status: {
       type: String,
       enum: [...WORKFLOW_STATUSES, ...LEGACY_STATUSES],
@@ -153,6 +166,10 @@ const requestSchema = new mongoose.Schema(
       default: false,
     },
     expiryReminderSent: {
+      type: Boolean,
+      default: false,
+    },
+    feedbackSubmitted: {
       type: Boolean,
       default: false,
     },

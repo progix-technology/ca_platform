@@ -52,6 +52,7 @@ const formatUser = (userDoc) => ({
   notificationsEnabled: userDoc.notificationsEnabled !== false,
   profileImage: userDoc.profileImage || '',
   profileImagePublicId: userDoc.profileImagePublicId || '',
+  feedbacks: userDoc.feedbacks || [],
   savedDocuments: formatSavedDocuments(userDoc.savedDocuments),
   address: {
     street: userDoc.address?.street || '',
@@ -59,6 +60,7 @@ const formatUser = (userDoc) => ({
     country: userDoc.address?.country || '',
     zipCode: userDoc.address?.zipCode || '',
   },
+  subscription: userDoc.subscription || null,
   createdAt: userDoc.createdAt,
   updatedAt: userDoc.updatedAt,
 });
@@ -280,7 +282,7 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
 });
 
 export const updateAdminSettings = asyncHandler(async (req, res) => {
-  const { name, phone, adminAssigned } = req.body;
+  const { name, phone, adminAssigned, address, street, city, country, zipCode, profileImage } = req.body;
   const adminId = req.user._id;
 
   const admin = await AdminUser.findById(adminId);
@@ -298,6 +300,54 @@ export const updateAdminSettings = asyncHandler(async (req, res) => {
 
   if (adminAssigned !== undefined) {
     admin.adminAssigned = adminAssigned;
+  }
+
+  if (profileImage !== undefined) {
+    const nextProfileImage = String(profileImage || '').trim();
+
+    if (!nextProfileImage) {
+      if (admin.profileImagePublicId) {
+        await deleteImageFromCloudinary(admin.profileImagePublicId);
+      }
+
+      admin.profileImage = '';
+      admin.profileImagePublicId = '';
+    } else if (/^data:image\/[a-zA-Z+]+;base64,/.test(nextProfileImage)) {
+      try {
+        const uploadResult = await uploadImageToCloudinary(nextProfileImage, {
+          public_id: `user_${admin._id}_${Date.now()}`,
+        });
+
+        if (admin.profileImagePublicId) {
+          await deleteImageFromCloudinary(admin.profileImagePublicId);
+        }
+
+        admin.profileImage = uploadResult.secure_url;
+        admin.profileImagePublicId = uploadResult.public_id;
+      } catch (error) {
+        throw new ApiError(500, error.message || 'Failed to upload image to Cloudinary');
+      }
+    } else {
+      throw new ApiError(400, 'Invalid image format. Please upload a valid image file.');
+    }
+  }
+
+  const incomingAddress = {
+    ...(address && typeof address === 'object' ? address : {}),
+    ...(street !== undefined ? { street } : {}),
+    ...(city !== undefined ? { city } : {}),
+    ...(country !== undefined ? { country } : {}),
+    ...(zipCode !== undefined ? { zipCode } : {}),
+  };
+
+  if (Object.keys(incomingAddress).length > 0) {
+    admin.address = {
+      ...admin.address,
+      ...(incomingAddress.street !== undefined ? { street: String(incomingAddress.street).trim() } : {}),
+      ...(incomingAddress.city !== undefined ? { city: String(incomingAddress.city).trim() } : {}),
+      ...(incomingAddress.country !== undefined ? { country: String(incomingAddress.country).trim() } : {}),
+      ...(incomingAddress.zipCode !== undefined ? { zipCode: String(incomingAddress.zipCode).trim() } : {}),
+    };
   }
 
   await admin.save();

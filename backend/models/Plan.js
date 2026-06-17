@@ -41,6 +41,14 @@ const planSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    leadPriorityLevel: {
+      type: Number,
+      default: 0,
+    },
+    hasAdvancedAnalytics: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

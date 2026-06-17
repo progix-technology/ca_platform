@@ -189,6 +189,18 @@ export const login = asyncHandler(async (req, res) => {
       email: user.email,
       role: user.role || userRole,
       adminAssigned: (user.role || userRole) === 'admin' || (user.role || userRole) === 'superadmin' ? true : (user.adminAssigned || false),
+      phone: user.phone || '',
+      address: user.address || {},
+      profileImage: user.profileImage || '',
+      pan: user.pan || '',
+      companyName: user.companyName || '',
+      nicCode: user.nicCode || '',
+      paidUpCapital: user.paidUpCapital || '',
+      authorizedCapital: user.authorizedCapital || '',
+      incorporationDate: user.incorporationDate || '',
+      registrationNumber: user.registrationNumber || '',
+      panCompliance: user.panCompliance || '',
+      cin: user.cin || '',
     },
   });
 });

@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { BarChart3, Users, Shield, Settings, LogOut, X, Zap } from 'lucide-react';
+import { BarChart3, Users, Shield, Settings, LogOut, X, Zap, Briefcase } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import logoImage from '../assets/logo.jpg';
 
@@ -7,6 +7,7 @@ const superAdminLinks = [
   { to: '/superadmin', icon: BarChart3, label: 'Overview' },
   { to: '/superadmin/admins', icon: Users, label: 'Admin Management' },
   { to: '/superadmin/plans', icon: Zap, label: 'Plans' },
+  { to: '/superadmin/services', icon: Briefcase, label: 'Services' },
   { to: '/superadmin/all-users', icon: Shield, label: 'All Users' },
   { to: '/superadmin/settings', icon: Settings, label: 'Settings' },
 ];

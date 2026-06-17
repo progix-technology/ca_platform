@@ -97,6 +97,7 @@ const populateRequest = (query) => query
   .populate('user', 'name email role')
   .populate('service', 'title category price documentsRequired')
   .populate('reviewedBy', 'name email role')
+  .populate('assignedTo', 'name email profileImage phone feedbacks')
   .populate('archivedBy', 'name email role')
   .populate('statusTimeline.changedBy', 'name email role')
   .populate('comments.author', 'name email role');
@@ -542,56 +543,28 @@ export const createRequest = asyncHandler(async (req, res) => {
     }],
   });
 
-  // Auto-assign to the admin with the least active requests
-  const admins = await AdminUser.find({}).select('_id');
+  await request.save();
 
-  if (admins.length > 0) {
-    const activeRequestCounts = await Promise.all(
-      admins.map(admin =>
-        Request.countDocuments({
-          assignedTo: admin._id,
-          status: { $nin: ['Completed', 'Rejected'] },
-        })
-      )
-    );
+  // Notify all admins and superadmins that a new request is available
+  const AdminUser = (await import('../models/AdminUser.js')).default;
+  const SuperAdmin = (await import('../models/SuperAdmin.js')).default;
+  
+  const allAdminsAndSuperAdmins = await Promise.all([
+    AdminUser.find({}).select('_id'),
+    SuperAdmin.find({}).select('_id')
+  ]).then(([admins, superadmins]) => [...admins, ...superadmins]);
 
-    let leastBusyAdminIndex = 0;
-    for (let i = 1; i < activeRequestCounts.length; i++) {
-      if (activeRequestCounts[i] < activeRequestCounts[leastBusyAdminIndex]) {
-        leastBusyAdminIndex = i;
-      }
-    }
-
-    const assignedAdmin = admins[leastBusyAdminIndex];
-    request.assignedTo = assignedAdmin._id;
-    await request.save();
-
-    // Notify only the assigned admin
-    await Notification.create({
-      user: assignedAdmin._id,
+  if (allAdminsAndSuperAdmins.length > 0) {
+    await Notification.insertMany(allAdminsAndSuperAdmins.map((admin) => ({
+      user: admin._id,
       request: request._id,
-      type: 'request-assigned',
-      title: 'New request assigned',
-      message: `A new request for ${service.title} from ${req.user.name || 'a user'} has been assigned to you.`,
+      type: 'request-created',
+      title: 'New Service Request Available',
+      message: `${req.user.name || 'A user'} submitted a new request for ${service.title}. It is available in the Unassigned pool.`,
       meta: {
         requestId: request._id,
       },
-    });
-  } else {
-    // If no admins are available, notify all superadmins
-    const superadminUsers = await SuperAdmin.find({}).select('_id');
-    if (superadminUsers.length > 0) {
-      await Notification.insertMany(superadminUsers.map((admin) => ({
-        user: admin._id,
-        request: request._id,
-        type: 'request-created',
-        title: 'New service request (unassigned)',
-        message: `${req.user.name || 'A user'} submitted a new request for ${service.title}. No admins available to assign.`,
-        meta: {
-          requestId: request._id,
-        },
-      })));
-    }
+    })));
   }
 
   const populatedRequest = await populateRequest(Request.findById(request._id));
@@ -605,6 +578,7 @@ export const getMyRequests = asyncHandler(async (req, res) => {
   const requests = await Request.find({ user: req.user._id })
     .populate('service', 'title category price')
     .populate('reviewedBy', 'name role')
+    .populate('assignedTo', 'name email profileImage feedbacks')
     .sort({ createdAt: -1 });
 
   const items = requests.map((request) => request.toObject());
@@ -618,10 +592,40 @@ export const getAllRequests = asyncHandler(async (req, res) => {
   const includeArchived = req.query.includeArchived === 'true';
   const filter = includeArchived ? {} : { archivedByAdmin: { $ne: true } };
 
-  // If the user is a regular admin, only show requests assigned to them.
-  // Superadmins can see all requests.
+  // Fetch the current admin user to get their subscription and leadPriorityLevel
+  let leadPriorityLevel = 0;
   if (req.user.role === 'admin') {
-    filter.assignedTo = req.user._id;
+    const adminUser = await AdminUser.findById(req.user._id).populate('subscription.planId');
+    if (adminUser?.subscription?.planId?.leadPriorityLevel) {
+      leadPriorityLevel = adminUser.subscription.planId.leadPriorityLevel;
+    }
+  }
+
+  // If the user is a regular admin, apply standard filters
+  if (req.user.role === 'admin') {
+    filter.$or = [
+      { assignedTo: req.user._id },
+      { assignedTo: null },
+      { acquireStatus: 'pending_user_approval' }
+    ];
+
+    // Lead Priority Logic: 
+    // If priority is 0 (Basic), they can't see requests created in the last 30 minutes
+    // If priority is 1 (Medium), they can't see requests created in the last 15 minutes
+    // If priority is 2+ (High), they see them immediately.
+    // This only applies to unassigned requests.
+    if (leadPriorityLevel < 2) {
+      const delayMinutes = leadPriorityLevel === 1 ? 15 : 30;
+      const cutoffTime = new Date(Date.now() - delayMinutes * 60 * 1000);
+      
+      // We modify the $or array to apply the cutoff time only to unassigned requests
+      filter.$or = filter.$or.map(condition => {
+        if (condition.assignedTo === null) {
+          return { assignedTo: null, createdAt: { $lte: cutoffTime } };
+        }
+        return condition;
+      });
+    }
   }
 
   const requests = await populateRequest(
@@ -1177,5 +1181,259 @@ export const completeRequestPayment = asyncHandler(async (req, res) => {
 
   return sendResponse(res, 200, true, 'Payment completed and request marked as Paid', {
     request: updated,
+  });
+});
+
+export const acquireRequest = asyncHandler(async (req, res) => {
+  const userRole = req.user.role;
+
+  // Subscription Enforcement for Admins
+  if (userRole === 'admin' || userRole === 'superadmin') {
+    const AdminModel = userRole === 'admin' ? AdminUser : SuperAdmin;
+    const admin = await AdminModel.findById(req.user._id).populate('subscription.planId');
+    
+    if (!admin || !admin.subscription || !admin.subscription.planId) {
+      throw new ApiError(403, 'Subscription details not found. Please activate a plan to acquire requests.');
+    }
+
+    const { status, endDate, usage, planId } = admin.subscription;
+    
+    if (status !== 'active' && status !== 'trial') {
+      throw new ApiError(403, 'Your subscription is not active. Please renew your plan to acquire requests.');
+    }
+    
+    if (endDate && new Date() > new Date(endDate)) {
+      admin.subscription.status = 'expired';
+      await admin.save();
+      throw new ApiError(403, 'Your subscription has expired. Please renew your plan.');
+    }
+    
+    if (planId.requestLimitPerMonth !== -1) {
+      if (usage >= planId.requestLimitPerMonth) {
+        throw new ApiError(403, 'Plan request limit reached. Please upgrade your subscription.');
+      }
+    }
+    
+    // We will increment the usage if the request acquisition is successful below
+    req.adminUserToUpdate = admin;
+  }
+
+  const { proposedTime, proposedPrice } = req.body;
+  const request = await Request.findById(req.params.id).populate('user').populate('service');
+  
+  if (!request) {
+    throw new ApiError(404, 'Request not found');
+  }
+
+  if (request.acquireStatus !== 'unacquired' || request.assignedTo) {
+    throw new ApiError(400, 'This request has already been acquired by someone else.');
+  }
+
+  request.assignedTo = req.user._id;
+  request.acquireStatus = 'pending_user_approval';
+  request.proposedTime = proposedTime || '';
+  if (proposedPrice !== undefined && proposedPrice !== null) {
+    request.proposedPrice = Number(proposedPrice);
+  }
+
+  await request.save();
+
+  // Increment usage
+  if (req.adminUserToUpdate) {
+    req.adminUserToUpdate.subscription.usage = (req.adminUserToUpdate.subscription.usage || 0) + 1;
+    await req.adminUserToUpdate.save();
+  }
+
+  // Notify the user
+  await Notification.create({
+    user: request.user._id,
+    request: request._id,
+    type: 'request-status',
+    title: 'CA Proposed to Fulfill Your Request',
+    message: `A CA (${req.user.name}) has offered to fulfill your request. Please review their proposal.`,
+    meta: {
+      requestId: request._id,
+    },
+  });
+
+  const updated = await populateRequest(Request.findById(request._id));
+  return sendResponse(res, 200, true, 'Request acquired successfully. Pending user approval.', {
+    request: updated,
+  });
+});
+
+export const respondToAcquisition = asyncHandler(async (req, res) => {
+  const { status } = req.body; // 'approve' or 'deny'
+  const request = await Request.findById(req.params.id);
+
+  if (!request) {
+    throw new ApiError(404, 'Request not found');
+  }
+
+  if (String(request.user) !== String(req.user._id)) {
+    throw new ApiError(403, 'You are not authorized to respond to this request');
+  }
+
+  if (request.acquireStatus !== 'pending_user_approval') {
+    throw new ApiError(400, 'Request is not pending approval');
+  }
+
+  if (status === 'approve') {
+    request.acquireStatus = 'approved';
+    request.status = 'In Review';
+    await request.save();
+
+    await Notification.create({
+      user: request.assignedTo,
+      request: request._id,
+      type: 'request-status',
+      title: 'Proposal Approved',
+      message: `The user has approved your proposal. You can now start working on the request.`,
+      meta: {
+        requestId: request._id,
+      },
+    });
+  } else if (status === 'deny') {
+    const rejectedAdminId = request.assignedTo;
+    request.acquireStatus = 'unacquired';
+    request.assignedTo = null;
+    request.proposedTime = '';
+    request.proposedPrice = null;
+    await request.save();
+
+    await Notification.create({
+      user: rejectedAdminId,
+      request: request._id,
+      type: 'request-status',
+      title: 'Proposal Denied',
+      message: `The user has denied your proposal for the request.`,
+      meta: {
+        requestId: request._id,
+      },
+    });
+  } else {
+    throw new ApiError(400, 'Invalid status response');
+  }
+
+  const updated = await populateRequest(Request.findById(request._id));
+  return sendResponse(res, 200, true, 'Response recorded successfully', {
+    request: updated,
+  });
+});
+
+export const updateRequestPrice = asyncHandler(async (req, res) => {
+  const { proposedPrice } = req.body;
+  const request = await Request.findById(req.params.id);
+
+  if (!request) {
+    throw new ApiError(404, 'Request not found');
+  }
+
+  if (proposedPrice !== undefined && proposedPrice !== null) {
+    request.proposedPrice = Number(proposedPrice);
+  }
+
+  await request.save();
+
+  await Notification.create({
+    user: request.user._id,
+    request: request._id,
+    type: 'request-status',
+    title: 'Price Updated',
+    message: `The price for your request has been updated to ₹${proposedPrice}. Please review.`,
+    meta: {
+      requestId: request._id,
+    },
+  });
+
+  const updated = await populateRequest(Request.findById(request._id));
+  return sendResponse(res, 200, true, 'Request price updated successfully.', {
+    request: updated,
+  });
+});
+
+export const submitFeedback = asyncHandler(async (req, res) => {
+  const request = await Request.findById(req.params.id)
+    .populate('service', 'title')
+    .populate('user', 'name');
+
+  if (!request) {
+    throw new ApiError(404, 'Request not found');
+  }
+
+  if (request.user._id.toString() !== req.user._id.toString() && req.user.role !== 'superadmin') {
+    throw new ApiError(403, 'Not authorized to provide feedback for this request');
+  }
+
+  if (request.status !== 'Completed') {
+    throw new ApiError(400, 'Feedback can only be submitted for completed services');
+  }
+
+  if (request.feedbackSubmitted) {
+    throw new ApiError(400, 'Feedback has already been submitted for this request');
+  }
+
+  const { rating, comment } = req.body;
+
+  if (rating < 1 || rating > 5) {
+    throw new ApiError(400, 'Rating must be between 1 and 5');
+  }
+
+  if (request.assignedTo) {
+    const AdminUser = (await import('../models/AdminUser.js')).default;
+    const adminUser = await AdminUser.findById(request.assignedTo);
+    if (adminUser) {
+      adminUser.feedbacks = adminUser.feedbacks || [];
+      adminUser.feedbacks.push({
+        userId: req.user._id,
+        userName: request.user?.name || req.user.name,
+        requestId: request._id,
+        serviceName: request.service?.title || 'Unknown Service',
+        rating: Number(rating),
+        comment,
+        createdAt: new Date(),
+      });
+      await adminUser.save();
+    }
+  }
+
+  request.feedbackSubmitted = true;
+  await request.save();
+
+  return sendResponse(res, 200, true, 'Feedback submitted successfully');
+});
+
+// @desc    Cancel a request by user
+// @route   PATCH /api/requests/:id/cancel
+// @access  Private
+export const cancelRequest = asyncHandler(async (req, res) => {
+  const request = await Request.findById(req.params.id);
+
+  if (!request) {
+    throw new ApiError(404, 'Request not found');
+  }
+
+  // Ensure user owns request
+  if (request.user.toString() !== req.user._id.toString()) {
+    throw new ApiError(403, 'Not authorized to cancel this request');
+  }
+
+  if (['Completed', 'Rejected', 'Canceled'].includes(request.status)) {
+    throw new ApiError(400, 'Cannot cancel a completed, rejected, or already canceled request');
+  }
+
+  // Find index of 'Rejected' in timeline or just push it
+  request.status = 'Rejected';
+  
+  request.statusTimeline.push({
+    status: 'Rejected',
+    changedBy: req.user._id,
+    note: 'services canceled by user'
+  });
+
+  await request.save();
+
+  return sendResponse(res, 200, true, 'Request cancelled successfully', {
+    request
   });
 });

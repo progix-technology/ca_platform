@@ -15,6 +15,7 @@ import SuperAdminAdmins from './pages/SuperAdminAdmins';
 import SuperAdminPlans from './pages/SuperAdminPlans';
 import SuperAdminAllUsers from './pages/SuperAdminAllUsers';
 import SuperAdminSettings from './pages/SuperAdminSettings';
+import SuperAdminServices from './pages/SuperAdminServices';
 import PendingAssignment from './pages/PendingAssignment';
 
 export default function App() {
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="/superadmin" element={<ProtectedRoute superAdminOnly><SuperAdminDashboard /></ProtectedRoute>} />
           <Route path="/superadmin/admins" element={<ProtectedRoute superAdminOnly><SuperAdminAdmins /></ProtectedRoute>} />
           <Route path="/superadmin/plans" element={<ProtectedRoute superAdminOnly><SuperAdminPlans /></ProtectedRoute>} />
+          <Route path="/superadmin/services" element={<ProtectedRoute superAdminOnly><SuperAdminServices /></ProtectedRoute>} />
           <Route path="/superadmin/all-users" element={<ProtectedRoute superAdminOnly><SuperAdminAllUsers /></ProtectedRoute>} />
           <Route path="/superadmin/settings" element={<ProtectedRoute superAdminOnly><SuperAdminSettings /></ProtectedRoute>} />
         </Routes>

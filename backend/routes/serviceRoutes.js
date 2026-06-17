@@ -7,7 +7,7 @@ import {
   updateService,
 } from '../controllers/serviceController.js';
 import { protect } from '../middleware/authMiddleware.js';
-import { adminOnly } from '../middleware/adminMiddleware.js';
+import { superAdminOnly } from '../middleware/adminMiddleware.js';
 import { validateRequiredFields } from '../middleware/validateMiddleware.js';
 
 const router = express.Router();
@@ -18,11 +18,11 @@ router.get('/:id', getServiceById);
 router.post(
   '/',
   protect,
-  adminOnly,
+  superAdminOnly,
   validateRequiredFields(['title', 'description', 'price', 'category']),
   createService,
 );
-router.put('/:id', protect, adminOnly, updateService);
-router.delete('/:id', protect, adminOnly, deleteService);
+router.put('/:id', protect, superAdminOnly, updateService);
+router.delete('/:id', protect, superAdminOnly, deleteService);
 
 export default router;

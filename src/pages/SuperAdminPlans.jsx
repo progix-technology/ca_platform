@@ -22,6 +22,8 @@ export default function SuperAdminPlans() {
     maxRequests: '',
     docLimit: '',
     allowedTiers: [],
+    leadPriorityLevel: 0,
+    hasAdvancedAnalytics: false,
   });
 
   useEffect(() => {
@@ -54,6 +56,8 @@ export default function SuperAdminPlans() {
       maxRequests: '',
       docLimit: '',
       allowedTiers: [],
+      leadPriorityLevel: 0,
+      hasAdvancedAnalytics: false,
     });
     setPlanError('');
     setEditingPlan(null);
@@ -79,6 +83,8 @@ export default function SuperAdminPlans() {
         maxRequests: newPlanData.maxRequests ? parseInt(newPlanData.maxRequests) : -1,
         docLimit: newPlanData.docLimit ? parseInt(newPlanData.docLimit) : 0,
         allowedTiers: newPlanData.allowedTiers,
+        leadPriorityLevel: parseInt(newPlanData.leadPriorityLevel || 0),
+        hasAdvancedAnalytics: Boolean(newPlanData.hasAdvancedAnalytics),
       };
 
       if (editingPlan) {
@@ -112,6 +118,8 @@ export default function SuperAdminPlans() {
       maxRequests: (plan.maxRequests !== undefined ? plan.maxRequests : -1).toString(),
       docLimit: (plan.docLimit || 0).toString(),
       allowedTiers: plan.allowedTiers || [],
+      leadPriorityLevel: plan.leadPriorityLevel || 0,
+      hasAdvancedAnalytics: plan.hasAdvancedAnalytics || false,
     });
     setShowAddPlan(true);
   };
@@ -369,18 +377,7 @@ export default function SuperAdminPlans() {
                               placeholder="-1"
                             />
                           </label>
-                          <label className="space-y-2 text-sm">
-                            <span className="font-medium text-slate-700">Document Limit</span>
-                            <input
-                              type="number"
-                              value={newPlanData.docLimit}
-                              onChange={(e) => handleAddPlanInput('docLimit', e.target.value)}
-                              className="input-field"
-                              placeholder="0"
-                              min="0"
-                            />
-                          </label>
-                          <div className="sm:col-span-2 space-y-2">
+                          <div className="sm:col-span-2 space-y-2 mt-4">
                             <span className="text-sm font-medium text-slate-700">Allowed Tiers</span>
                             <div className="flex flex-wrap gap-4 pt-1">
                               {['basic', 'pro', 'premium', 'trial'].map((tier) => (
@@ -401,6 +398,29 @@ export default function SuperAdminPlans() {
                               ))}
                             </div>
                           </div>
+                          
+                          <label className="space-y-2 text-sm">
+                            <span className="font-medium text-slate-700">Lead Priority Level (0 = Normal, 1 = Medium, 2 = High)</span>
+                            <input
+                              type="number"
+                              value={newPlanData.leadPriorityLevel}
+                              onChange={(e) => handleAddPlanInput('leadPriorityLevel', e.target.value)}
+                              className="input-field"
+                              placeholder="0"
+                              min="0"
+                              max="10"
+                            />
+                          </label>
+                          <label className="space-y-2 text-sm flex items-center gap-3 pt-6">
+                            <input
+                              type="checkbox"
+                              checked={newPlanData.hasAdvancedAnalytics}
+                              onChange={(e) => handleAddPlanInput('hasAdvancedAnalytics', e.target.checked)}
+                              className="w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                            />
+                            <span className="font-medium text-slate-700 cursor-pointer" onClick={() => handleAddPlanInput('hasAdvancedAnalytics', !newPlanData.hasAdvancedAnalytics)}>Enable Advanced Analytics & Reports</span>
+                          </label>
+
                         </div>
                         <div className="flex flex-col gap-3 sm:flex-row sm:justify-end pt-4 border-t border-slate-200">
                           <button

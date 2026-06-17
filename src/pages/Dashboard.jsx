@@ -9,7 +9,7 @@ import { notificationAPI, requestAPI, serviceAPI, userAPI } from '../services/ap
 import CompletedList from './CompletedList';
 import { normalizeService } from '../services/serviceMapper';
 import { downloadInvoice } from '../services/api';
-
+import AdminProfileModal from '../components/AdminProfileModal';
 const normalizeStatus = (status) => String(status || '').trim().toLowerCase().replace(/\s+/g, '');
 
 const normalizeWorkflowStatus = (status) => {
@@ -496,7 +496,7 @@ function MyServices({ requests, loadingRequests, onOpenRequest, fetchMyRequests 
                   const requestId = req._id || req.id;
                   const appliedDate = req.createdAt || req.date;
                   const serviceTitle = req.service?.title || req.service || 'N/A';
-                  const amount = Number(req.service?.price || req.amount || 0);
+                  const amount = Number(req.proposedPrice || req.service?.price || req.amount || 0);
 
                   return (
                     <tr
@@ -587,7 +587,7 @@ function RenewedServices({ requests, loadingRequests, onOpenRequest }) {
                 {renewedRequests.map((req) => {
                   const requestId = req._id || req.id;
                   const serviceTitle = req.service?.title || req.service || 'N/A';
-                  const amount = Number(req.service?.price || req.amount || 0);
+                  const amount = Number(req.proposedPrice || req.service?.price || req.amount || 0);
 
                   return (
                     <tr
@@ -639,6 +639,8 @@ function RequestTimelineModal({
   deletingCommentId,
   onPayNow,
   processingPayment,
+  onRespondToAcquisition,
+  onCancelRequest,
   onClose,
 }) {
   const timeline = Array.isArray(request?.statusTimeline)
@@ -654,7 +656,7 @@ function RequestTimelineModal({
   const requestId = request?._id || request?.id;
   const requestCode = formatRequestCode(requestId || '');
   const workflowStatus = normalizeWorkflowStatus(request?.status);
-  const requestAmount = Number(request?.service?.price || request?.amount || 0);
+  const requestAmount = Number(request?.proposedPrice || request?.service?.price || request?.amount || 0);
   const currentUserId = String(currentUser?._id || currentUser?.id || '');
   const lastApprovedTimelineIndex = timeline.reduce(
     (acc, item, index) => (normalizeWorkflowStatus(item.status) === 'approved' ? index : acc),
@@ -664,6 +666,8 @@ function RequestTimelineModal({
     (acc, item, index) => (normalizeWorkflowStatus(item.status) === 'completed' ? index : acc),
     -1,
   );
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [showProceedToPayment, setShowProceedToPayment] = useState(false);
   const [showPaymentMethods, setShowPaymentMethods] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('');
   const [cardPaymentDetails, setCardPaymentDetails] = useState({
@@ -963,6 +967,31 @@ function RequestTimelineModal({
       return null;
     }
 
+    if (!showProceedToPayment) {
+      return (
+        <div className="dashboard-request-modal__section dashboard-request-modal__payment dashboard-request-modal__payment-inline">
+          <h4 className="dashboard-request-modal__section-title">Payment Pending</h4>
+          <p className="dashboard-request-modal__payment-copy">
+            Your request is approved. Please proceed further for payment to complete this request.
+          </p>
+          <div className="flex gap-3 mt-4">
+            <button
+              onClick={() => setShowProceedToPayment(true)}
+              className="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded transition-colors text-sm"
+            >
+              Move to proceed further for payment
+            </button>
+            <button
+              onClick={onCancelRequest}
+              className="bg-white border border-red-500 text-red-500 hover:bg-red-50 font-medium py-2 px-4 rounded transition-colors text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="dashboard-request-modal__section dashboard-request-modal__payment dashboard-request-modal__payment-inline">
         <h4 className="dashboard-request-modal__section-title">Payment Pending</h4>
@@ -1128,6 +1157,115 @@ function RequestTimelineModal({
               </div>
             </div>
 
+            {request.acquireStatus === 'pending_user_approval' && request.proposedTime && (
+              <div className="dashboard-request-modal__section dashboard-request-modal__payment dashboard-request-modal__payment-inline" style={{ backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }}>
+                <h4 className="dashboard-request-modal__section-title" style={{ color: '#1e3a8a' }}>Action Required: CA Proposal</h4>
+                <p className="dashboard-request-modal__payment-copy" style={{ color: '#1e40af' }}>
+                  {request.assignedTo ? (
+                    <button onClick={() => setProfileOpen(true)} className="font-bold hover:underline text-blue-700 cursor-pointer focus:outline-none">
+                      {request.assignedTo.name}
+                    </button>
+                  ) : (
+                    <strong>A CA Admin</strong>
+                  )}{' '} 
+                  has reviewed your request and proposed the following terms:
+                </p>
+
+                <div className="bg-white/50 rounded-lg p-3 mt-3 border border-blue-100 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {request.assignedTo?.name && (
+                    <div>
+                      <p className="text-xs font-semibold text-blue-500 uppercase tracking-wider mb-2">CA Name</p>
+                      <button 
+                        onClick={() => setProfileOpen(true)}
+                        className="text-sm font-medium text-slate-800 flex items-center gap-2.5 hover:text-blue-600 transition-colors focus:outline-none bg-white py-1.5 px-3 rounded-lg border border-slate-200 shadow-sm hover:shadow hover:border-blue-300 w-fit"
+                      >
+                        {request.assignedTo.profileImage ? (
+                          <img 
+                            src={request.assignedTo.profileImage.startsWith('http') ? request.assignedTo.profileImage : `${import.meta.env.VITE_API_URL?.replace(/\/api\/?$/, '') || 'http://localhost:5000'}${request.assignedTo.profileImage.startsWith('/') ? '' : '/'}${request.assignedTo.profileImage}`} 
+                            alt="CA" 
+                            className="w-6 h-6 rounded-full object-cover" 
+                          />
+                        ) : (
+                          <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-xs text-slate-600 border border-slate-200">
+                            {request.assignedTo.name.substring(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                        <span>{request.assignedTo.name} <span className="text-xs text-blue-500 font-normal ml-1 hover:underline">(View Profile)</span></span>
+                      </button>
+                    </div>
+                  )}
+                  {request.assignedTo?.phone && (
+                    <div>
+                      <p className="text-xs font-semibold text-blue-500 uppercase tracking-wider mb-1">Contact Number</p>
+                      <p className="text-sm font-medium text-slate-800 flex items-center gap-2 group">
+                        {request.assignedTo.phone}
+                        <button
+                          type="button"
+                          title="Copy phone number"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-blue-600 hover:text-blue-800"
+                          onClick={() => {
+                            navigator.clipboard.writeText(request.assignedTo.phone);
+                            toast.success('Phone number copied');
+                          }}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                        </button>
+                      </p>
+                    </div>
+                  )}
+                  {(request.assignedTo?.location || request.assignedTo?.address?.city) && (
+                    <div className="md:col-span-2">
+                      <p className="text-xs font-semibold text-blue-500 uppercase tracking-wider mb-1">Location</p>
+                      <p className="text-sm font-medium text-slate-800 flex items-center gap-2 group">
+                        {request.assignedTo?.location || [request.assignedTo?.address?.city, request.assignedTo?.address?.country].filter(Boolean).join(', ')}
+                        <button
+                          type="button"
+                          title="Copy location"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-blue-600 hover:text-blue-800"
+                          onClick={() => {
+                            const loc = request.assignedTo?.location || [request.assignedTo?.address?.city, request.assignedTo?.address?.country].filter(Boolean).join(', ');
+                            navigator.clipboard.writeText(loc);
+                            toast.success('Location copied');
+                          }}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                        </button>
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="dashboard-request-modal__summary" style={{ marginTop: '16px', border: 'none', padding: 0 }}>
+                  <div>
+                    <p className="dashboard-request-modal__label" style={{ color: '#3b82f6' }}>Estimated Time</p>
+                    <p className="dashboard-request-modal__value" style={{ color: '#1e3a8a' }}>{request.proposedTime}</p>
+                  </div>
+                  {request.proposedPrice && (
+                    <div>
+                      <p className="dashboard-request-modal__label" style={{ color: '#3b82f6' }}>Proposed Price</p>
+                      <p className="dashboard-request-modal__value" style={{ color: '#1e3a8a' }}>₹{Number(request.proposedPrice).toLocaleString('en-IN')}</p>
+                    </div>
+                  )}
+                </div>
+                <div className="dashboard-request-modal__payment-row" style={{ marginTop: '24px' }}>
+                  <Button
+                    variant="outline"
+                    onClick={() => onRespondToAcquisition && onRespondToAcquisition(false)}
+                    className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                  >
+                    Decline
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={() => onRespondToAcquisition && onRespondToAcquisition(true)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    Accept & Proceed
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div className="dashboard-request-modal__section">
               <h4 className="dashboard-request-modal__section-title">Status Timeline</h4>
               {timeline.length === 0 ? (
@@ -1142,6 +1280,12 @@ function RequestTimelineModal({
                         <p className="dashboard-request-modal__timeline-meta">
                           {item.createdAt ? new Date(item.createdAt).toLocaleString('en-IN') : '-'}
                         </p>
+                        {item.changedBy && item.changedBy.role === 'admin' && (
+                          <p className="dashboard-request-modal__timeline-meta mt-1 text-blue-600">
+                            By CA: {item.changedBy.name} 
+                            {(item.changedBy.location || item.changedBy.address?.city) ? ` (${item.changedBy.location || [item.changedBy.address?.city, item.changedBy.address?.country].filter(Boolean).join(', ')})` : ''}
+                          </p>
+                        )}
                         {(index === lastCompletedTimelineIndex
                           && normalizeWorkflowStatus(item.status) === 'completed'
                           && workflowStatus === 'completed') && (
@@ -1257,6 +1401,13 @@ function RequestTimelineModal({
           </div>
         )}
       </div>
+      
+      {/* Admin Profile Modal */}
+      <AdminProfileModal 
+        open={profileOpen} 
+        onClose={() => setProfileOpen(false)} 
+        admin={request?.assignedTo} 
+      />
     </div>
   );
 }
@@ -2390,6 +2541,22 @@ export default function Dashboard() {
     }
   };
 
+  const handleCancelRequest = async () => {
+    if (!selectedRequestId) return;
+    
+    const confirmCancel = window.confirm('Are you sure you want to cancel this request? This action cannot be undone.');
+    if (!confirmCancel) return;
+
+    try {
+      await requestAPI.cancel(selectedRequestId);
+      toast.success('Request cancelled successfully');
+      handleCloseRequest();
+      fetchMyRequests();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to cancel request');
+    }
+  };
+
   const handleCompletePayment = async (paymentPayload = null) => {
     if (!selectedRequestId) {
       return { success: false };
@@ -2422,6 +2589,19 @@ export default function Dashboard() {
       return { success: false };
     } finally {
       setProcessingPayment(false);
+    }
+  };
+
+  const handleRespondToAcquisition = async (isApproved) => {
+    if (!selectedRequestId) return;
+    try {
+      await requestAPI.respondToAcquisition(selectedRequestId, { status: isApproved ? 'approve' : 'deny' });
+      toast.success(isApproved ? 'Proposal accepted! CA assigned.' : 'Proposal declined.');
+      // Refetch current request
+      await handleOpenRequest(selectedRequestId);
+      await fetchMyRequests();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to respond to proposal');
     }
   };
 
@@ -2625,8 +2805,10 @@ export default function Dashboard() {
                               className="dashboard-page__notif-item-main"
                               onClick={() => handleNotificationClick(notification)}
                             >
-                              <p className="dashboard-page__notif-item-title">{notification.title || 'Update'}</p>
-                              <p className="dashboard-page__notif-item-copy">{notification.message}</p>
+                              <div className="dashboard-page__notif-item-body">
+                                <p className="dashboard-page__notif-item-title">{notification.title || 'Update'}</p>
+                                <p className="dashboard-page__notif-item-copy" style={{ whiteSpace: 'pre-wrap' }}>{notification.message}</p>
+                              </div>
                             </button>
 
                             {notification.meta?.renewUrl && (
@@ -2724,6 +2906,8 @@ export default function Dashboard() {
         deletingCommentId={deletingRequestCommentId}
         onPayNow={handleCompletePayment}
         processingPayment={processingPayment}
+        onRespondToAcquisition={handleRespondToAcquisition}
+        onCancelRequest={handleCancelRequest}
         onClose={handleCloseRequest}
       />
     </div>
