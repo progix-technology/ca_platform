@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Routes, Route, useSearchParams, Outlet, useLocation } from 'react-router-dom';
 import { Menu, Bell, Loader2, X, Plus } from 'lucide-react';
 import Sidebar from '../layout/Sidebar';
@@ -7,21 +7,14 @@ import Button from '../components/Button';
 import toast from 'react-hot-toast';
 import { requestAPI, userAPI, notificationAPI } from '../services/api';
 
-const AdminOverview = lazy(() => import('./AdminOverview'));
-const ManageRequests = lazy(() => import('./ManageRequests'));
-const AdminUsers = lazy(() => import('./AdminUsers'));
-const SettingsCompletedList = lazy(() => import('./SettingsCompletedList'));
-const AdminRenewals = lazy(() => import('./AdminRenewals'));
-const AdminSettings = lazy(() => import('./AdminSettings'));
-const Subscription = lazy(() => import('./Subscription'));
-const AdminAnalytics = lazy(() => import('./AdminAnalytics'));
-
-const FallbackLoader = () => (
-  <div className="flex-1 flex flex-col items-center justify-center min-h-[50vh]">
-    <Loader2 className="animate-spin text-blue-600 mb-4" size={40} />
-    <p className="text-slate-500 font-medium animate-pulse">Loading component...</p>
-  </div>
-);
+import AdminOverview from './AdminOverview';
+import ManageRequests from './ManageRequests';
+import AdminUsers from './AdminUsers';
+import SettingsCompletedList from './SettingsCompletedList';
+import AdminRenewals from './AdminRenewals';
+import AdminSettings from './AdminSettings';
+import Subscription from './Subscription';
+import AdminAnalytics from './AdminAnalytics';
 
 export default function AdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -491,70 +484,68 @@ export default function AdminDashboard() {
         </header>
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
-          <Suspense fallback={<FallbackLoader />}>
-            <Routes>
-              <Route
-                index
-                element={(
-                  <AdminOverview
-                    requests={requests}
-                    loading={loadingRequests}
-                    totalUsersCount={totalUsersCount}
-                    loadingUsersCount={loadingUsersCount}
-                    onAcquireRequest={acquireRequestData}
-                    acquiringRequestId={acquiringRequestId}
-                    currentUser={user}
-                  />
-                )}
-              />
-              <Route
-                path="requests"
-                element={(
-                  <ManageRequests
-                    requests={requests}
-                    loading={loadingRequests}
-                    onUpdateStatus={updateRequestStatus}
-                    onAcquireRequest={acquireRequestData}
-                    onAddComment={addRequestComment}
-                    onUpdateComment={updateRequestComment}
-                    onDeleteComment={deleteRequestComment}
-                    onSaveToCompletedList={saveCompletedRequestToList}
-                    updatingRequestId={updatingRequestId}
-                    acquiringRequestId={acquiringRequestId}
-                    savingCompletedRequestId={savingCompletedRequestId}
-                    commentingRequestId={commentingRequestId}
-                    editingCommentKey={editingCommentKey}
-                    deletingCommentKey={deletingCommentKey}
-                    currentUser={user}
-                  />
-                )}
-              />
-              
-              <Route path="users" element={<AdminUsers requests={requests} />} />
-              <Route
-                path="completed-list"
-                element={(
-                  <SettingsCompletedList
-                    archivedRequests={archivedCompletedRequests}
-                    loading={loadingArchivedCompleted}
-                    onRefresh={fetchArchivedCompletedRequests}
-                  />
-                )}
-              />
-              <Route
-                path="renewals"
-                element={(
-                  <AdminRenewals
-                    requests={requests}
-                    loading={loadingRequests}
-                  />
-                )}
-              />
-              <Route path="subscription" element={<Subscription />} />
-              <Route path="analytics" element={<AdminAnalytics />} />
-              <Route path="settings" element={<AdminSettings />} />
-            </Routes>
-          </Suspense>
+          <Routes>
+            <Route
+              index
+              element={(
+                <AdminOverview
+                  requests={requests}
+                  loading={loadingRequests}
+                  totalUsersCount={totalUsersCount}
+                  loadingUsersCount={loadingUsersCount}
+                  onAcquireRequest={acquireRequestData}
+                  acquiringRequestId={acquiringRequestId}
+                  currentUser={user}
+                />
+              )}
+            />
+            <Route
+              path="requests"
+              element={(
+                <ManageRequests
+                  requests={requests}
+                  loading={loadingRequests}
+                  onUpdateStatus={updateRequestStatus}
+                  onAcquireRequest={acquireRequestData}
+                  onAddComment={addRequestComment}
+                  onUpdateComment={updateRequestComment}
+                  onDeleteComment={deleteRequestComment}
+                  onSaveToCompletedList={saveCompletedRequestToList}
+                  updatingRequestId={updatingRequestId}
+                  acquiringRequestId={acquiringRequestId}
+                  savingCompletedRequestId={savingCompletedRequestId}
+                  commentingRequestId={commentingRequestId}
+                  editingCommentKey={editingCommentKey}
+                  deletingCommentKey={deletingCommentKey}
+                  currentUser={user}
+                />
+              )}
+            />
+            
+            <Route path="users" element={<AdminUsers requests={requests} />} />
+            <Route
+              path="completed-list"
+              element={(
+                <SettingsCompletedList
+                  archivedRequests={archivedCompletedRequests}
+                  loading={loadingArchivedCompleted}
+                  onRefresh={fetchArchivedCompletedRequests}
+                />
+              )}
+            />
+            <Route
+              path="renewals"
+              element={(
+                <AdminRenewals
+                  requests={requests}
+                  loading={loadingRequests}
+                />
+              )}
+            />
+            <Route path="subscription" element={<Subscription />} />
+            <Route path="analytics" element={<AdminAnalytics />} />
+            <Route path="settings" element={<AdminSettings />} />
+          </Routes>
         </main>
       </div>
       {/* Subscription Prompt Modal */}
