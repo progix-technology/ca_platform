@@ -132,6 +132,20 @@ cron.schedule('0 9 * * *', async () => {
   await runExpiryReminderCheck();
 });
 
+// Run monthly usage reset on the 1st of every month at midnight
+cron.schedule('0 0 1 * *', async () => {
+  try {
+    const AdminUser = (await import('../models/AdminUser.js')).default;
+    const SuperAdmin = (await import('../models/SuperAdmin.js')).default;
+    
+    await AdminUser.updateMany({}, { $set: { 'subscription.usage': 0 } });
+    await SuperAdmin.updateMany({}, { $set: { 'subscription.usage': 0 } });
+    console.log('Monthly request usage limits have been reset for all CAs.');
+  } catch (err) {
+    console.error('Failed to reset monthly usage limits:', err);
+  }
+});
+
 // Delay initial check by 15 seconds to allow MongoDB connection to establish
 setTimeout(() => {
   runExpiryReminderCheck().catch((err) => {

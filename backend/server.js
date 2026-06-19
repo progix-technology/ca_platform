@@ -46,7 +46,7 @@ if (hasCloudinaryConfig()) {
 const allowedOrigins = (process.env.CLIENT_URL || '')
   .split(',')
   .filter(Boolean)
-  .map(url => url.trim().replace(/\/$/, '')); // Remove trailing slash for consistency
+  .map(url => url.trim().replace(/\/$/, ''));
 
 if (process.env.NODE_ENV === 'production' && allowedOrigins.length === 0) {
   throw new Error('CLIENT_URL must be set in production to restrict CORS access');

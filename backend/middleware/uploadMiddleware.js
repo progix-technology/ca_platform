@@ -1,7 +1,16 @@
 import multer from 'multer';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
+import { v2 as cloudinary } from 'cloudinary';
 import { ApiError } from '../utils/apiError.js';
 
-const storage = multer.memoryStorage();
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'ca-platform/documents',
+    resource_type: 'auto',
+    allowed_formats: ['pdf', 'jpg', 'png', 'jpeg', 'doc', 'docx']
+  },
+});
 
 const allowedMimeTypes = [
   'application/pdf',

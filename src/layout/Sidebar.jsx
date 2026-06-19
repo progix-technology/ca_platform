@@ -117,11 +117,11 @@ export default function Sidebar({ isAdmin = false, onClose, renewCount = 0 }) {
           
           return (
             <div key={to} className="app-sidebar__link-group">
-              <div className={isActive ? 'app-sidebar__link app-sidebar__link--active flex items-center justify-between' : 'app-sidebar__link flex items-center justify-between'}>
+              <div className={isActive ? 'app-sidebar__link app-sidebar__link--active flex items-center justify-between !p-0 overflow-hidden' : 'app-sidebar__link flex items-center justify-between !p-0 overflow-hidden'}>
                 <Link
                   to={to === '/admin/analytics' && !isPremium && !isSuperAdmin ? '#' : to}
                   onClick={(e) => handleLinkClick(e, to)}
-                  className="flex items-center gap-3 flex-1"
+                  className="flex items-center gap-3 flex-1 px-[0.9rem] py-[0.75rem] w-full h-full outline-none"
                 >
                   <Icon size={18} />
                   <span>{label}</span>
@@ -137,7 +137,7 @@ export default function Sidebar({ isAdmin = false, onClose, renewCount = 0 }) {
                   )}
                 </Link>
                 {hasSubLinks && (
-                  <button onClick={(e) => toggleSubmenu(e, to)} className="p-1 hover:bg-slate-200/50 rounded text-slate-400 hover:text-slate-600">
+                  <button onClick={(e) => toggleSubmenu(e, to)} className="p-2 mr-1 hover:bg-slate-200/50 rounded text-slate-400 hover:text-slate-600 outline-none">
                     {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                   </button>
                 )}

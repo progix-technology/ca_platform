@@ -94,7 +94,7 @@ const canTransitionStatus = (currentStatus, nextStatus) => {
 };
 
 const populateRequest = (query) => query
-  .populate('user', 'name email role')
+  .populate('user', 'name email role phone pan')
   .populate('service', 'title category price documentsRequired')
   .populate('reviewedBy', 'name email role')
   .populate('assignedTo', 'name email profileImage phone feedbacks')
@@ -501,19 +501,10 @@ export const createRequest = asyncHandler(async (req, res) => {
     .filter(Boolean)
     .map((doc) => ({ url: doc.url, name: doc.name }));
 
-  const uploadedDocuments = await Promise.all(
-    (req.files || []).map(async (file, index) => {
-      const uploaded = await uploadDocumentToCloudinary(file, {
-        folder: 'ca-platform/request-documents',
-        public_id: `request_${req.user._id}_${Date.now()}_${index}`,
-      });
-
-      return {
-        url: uploaded.secure_url,
-        name: file.originalname,
-      };
-    }),
-  );
+  const uploadedDocuments = (req.files || []).map((file) => ({
+    url: file.path,
+    name: file.originalname,
+  }));
 
   const finalDocumentsMap = new Map();
   approvedSavedDocuments.forEach((doc) => finalDocumentsMap.set(doc.url, doc));
@@ -609,23 +600,8 @@ export const getAllRequests = asyncHandler(async (req, res) => {
       { acquireStatus: 'pending_user_approval' }
     ];
 
-    // Lead Priority Logic: 
-    // If priority is 0 (Basic), they can't see requests created in the last 30 minutes
-    // If priority is 1 (Medium), they can't see requests created in the last 15 minutes
-    // If priority is 2+ (High), they see them immediately.
-    // This only applies to unassigned requests.
-    if (leadPriorityLevel < 2) {
-      const delayMinutes = leadPriorityLevel === 1 ? 15 : 30;
-      const cutoffTime = new Date(Date.now() - delayMinutes * 60 * 1000);
-      
-      // We modify the $or array to apply the cutoff time only to unassigned requests
-      filter.$or = filter.$or.map(condition => {
-        if (condition.assignedTo === null) {
-          return { assignedTo: null, createdAt: { $lte: cutoffTime } };
-        }
-        return condition;
-      });
-    }
+    // Lead Priority logic has been removed as per user request. 
+    // All admins now see requests immediately without any delay.
   }
 
   const requests = await populateRequest(
@@ -774,11 +750,7 @@ export const updateRequestStatus = asyncHandler(async (req, res) => {
     // Handle file uploads (from req.files)
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
-        const uploaded = await uploadDocumentToCloudinary(file, {
-          folder: 'ca-platform/deliverables',
-          public_id: `deliverable_${request._id}_${Date.now()}_${file.originalname}`,
-        });
-        deliverableUrls.push(uploaded.secure_url);
+        deliverableUrls.push(file.path);
       }
     }
     // Handle deliverable names (from req.body.deliverables)

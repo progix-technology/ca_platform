@@ -15,6 +15,7 @@ export default function ManageRequests({
   onAddComment,
   onUpdateComment,
   onDeleteComment,
+  onUpdatePrice,
   updatingRequestId,
   acquiringRequestId,
   commentingRequestId,
@@ -188,7 +189,7 @@ export default function ManageRequests({
   const [internalNoteDraftById, setInternalNoteDraftById] = useState({});
   const [publicCommentDraftById, setPublicCommentDraftById] = useState({});
   const [editingCommentState, setEditingCommentState] = useState({ requestId: '', commentId: '', text: '' });
-  
+
   const [acquireModal, setAcquireModal] = useState({ open: false, requestId: '', proposedTime: '', proposedPrice: '' });
   const [rejectModal, setRejectModal] = useState({ open: false, requestId: '', message: '' });
   const [updatePriceModal, setUpdatePriceModal] = useState({ open: false, requestId: '', proposedPrice: '' });
@@ -422,8 +423,8 @@ export default function ManageRequests({
                   const workflowStatus = normalizeWorkflowStatus(req.status);
                   const isExpanded = expandedRequestId === requestId;
                   const isUpdating = updatingRequestId === requestId;
-                  const isLockedForMe = typeof req.assignedTo === 'object' && req.assignedTo !== null 
-                    ? String(req.assignedTo._id || '') !== currentUserId 
+                  const isLockedForMe = typeof req.assignedTo === 'object' && req.assignedTo !== null
+                    ? String(req.assignedTo._id || '') !== currentUserId
                     : String(req.assignedTo || '') !== currentUserId && req.assignedTo;
 
                   return (
@@ -458,6 +459,7 @@ export default function ManageRequests({
                             {workflowStatus === 'inreview' && !isLockedForMe && (
                               <>
                                 <button onClick={() => handleApprove(requestId)} disabled={isUpdating} className="px-2.5 py-1 text-xs rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 font-medium">Approve Details</button>
+                                <button onClick={() => handleOpenUpdatePrice(requestId, req.proposedPrice || req.service?.price)} disabled={isUpdating} className="px-2.5 py-1 text-xs rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 font-medium">Update Price</button>
                                 <button onClick={() => handleOpenReject(requestId)} disabled={isUpdating} className="px-2.5 py-1 text-xs rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 font-medium">Reject</button>
                               </>
                             )}
@@ -486,8 +488,60 @@ export default function ManageRequests({
                         <tr className="bg-slate-50/60">
                           <td colSpan={7} className="p-4">
                             <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
-                              <p className="text-sm font-semibold">Additional Details Panel Placeholder</p>
-                              <p className="text-xs text-slate-500">The full details view has been condensed for brevity in this refactored component. Further UI updates can be easily applied here.</p>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                  <h4 className="text-sm font-bold text-slate-800 mb-3 uppercase tracking-wider">User Details</h4>
+                                  <div className="space-y-2 text-sm bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                    <p><span className="text-slate-500 font-medium">Name:</span> {req.user?.name || '-'}</p>
+                                    <p><span className="text-slate-500 font-medium">Email:</span> {req.user?.email || '-'}</p>
+                                    <p><span className="text-slate-500 font-medium">Phone:</span> {req.user?.phone || '-'}</p>
+                                    {req.user?.pan && <p><span className="text-slate-500 font-medium">PAN:</span> <span className="uppercase">{req.user.pan}</span></p>}
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <h4 className="text-sm font-bold text-slate-800 mb-3 uppercase tracking-wider">Form Details</h4>
+                                  {Object.keys(details).length > 0 ? (
+                                    <div className="space-y-2 text-sm bg-slate-50 p-4 rounded-xl border border-slate-100 max-h-48 overflow-y-auto custom-scrollbar">
+                                      {Object.entries(details).map(([k, v]) => {
+                                        if (k === 'message' && !v) return null;
+                                        return (
+                                          <p key={k}><span className="text-slate-500 font-medium capitalize">{k.replace(/([A-Z])/g, ' $1').trim()}:</span> {String(v)}</p>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-sm text-slate-500 italic">No additional details provided.</div>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="pt-4 border-t border-slate-100">
+                                <h4 className="text-sm font-bold text-slate-800 mb-3 uppercase tracking-wider">Uploaded Documents</h4>
+                                {req.documents && req.documents.length > 0 ? (
+                                  <div className="flex flex-wrap gap-3">
+                                    {req.documents.map((doc, idx) => {
+                                      const docUrl = typeof doc === 'string' ? doc : doc.url;
+                                      const docName = typeof doc === 'object' && doc.name ? doc.name : `Document ${idx + 1}`;
+                                      if (!docUrl) return null;
+                                      return (
+                                        <a
+                                          key={idx}
+                                          href={docUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl text-sm font-medium border border-indigo-100 transition-colors shadow-sm"
+                                        >
+                                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" /><polyline points="14 2 14 8 20 8" /></svg>
+                                          <span className="truncate max-w-[200px]">{docName}</span>
+                                        </a>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-slate-500 italic bg-slate-50 p-4 rounded-xl border border-slate-100">No documents uploaded with this request.</p>
+                                )}
+                              </div>
                             </div>
                           </td>
                         </tr>
@@ -499,7 +553,7 @@ export default function ManageRequests({
             </tbody>
           </table>
         </div>
-        
+
         {/* Pagination controls */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-6 py-3 border-t border-slate-200 bg-slate-50">
@@ -525,6 +579,45 @@ export default function ManageRequests({
           </div>
         )}
       </div>
+
+      {updatePriceModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="p-5 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-slate-800">Update Service Price</h3>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-slate-600">
+                You can adjust the final price for this request before approval.
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">New Price (₹)</label>
+                <input
+                  type="number"
+                  value={updatePriceModal.proposedPrice}
+                  onChange={(e) => setUpdatePriceModal({ ...updatePriceModal, proposedPrice: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="Enter custom price"
+                />
+              </div>
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+              <button
+                onClick={handleCloseUpdatePrice}
+                className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdatePriceSubmit}
+                className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Update Price
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

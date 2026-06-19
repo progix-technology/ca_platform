@@ -429,24 +429,17 @@ export const uploadMyDocuments = asyncHandler(async (req, res) => {
       ? [req.body.documentNames]
       : [];
 
-  const uploadedDocs = await Promise.all(
-    files.map(async (file, index) => {
-      const uploaded = await uploadDocumentToCloudinary(file, {
-        folder: 'ca-platform/user-documents',
-        public_id: `user_${req.user._id}_${Date.now()}_${index}`,
-      });
-
-      return {
-        name: documentNames[index] ? String(documentNames[index]).trim() : file.originalname,
-        url: uploaded.secure_url,
-        mimeType: file.mimetype,
-        size: file.size,
-        uploadedAt: new Date(),
-        cloudinaryPublicId: uploaded.public_id,
-        cloudinaryResourceType: uploaded.resource_type || 'raw',
-      };
-    }),
-  );
+  const uploadedDocs = files.map((file, index) => {
+    return {
+      name: documentNames[index] ? String(documentNames[index]).trim() : file.originalname,
+      url: file.path,
+      mimeType: file.mimetype,
+      size: file.size,
+      uploadedAt: new Date(),
+      cloudinaryPublicId: file.filename || '',
+      cloudinaryResourceType: 'auto',
+    };
+  });
 
   user.savedDocuments = [...(user.savedDocuments || []), ...uploadedDocs];
   await user.save();
@@ -484,10 +477,18 @@ export const deleteMyDocument = asyncHandler(async (req, res) => {
   });
 });
 
-export const getAllUsers = asyncHandler(async (_req, res) => {
-  // Get all regular users
-  const regularUsers = await User.find({}).select('-password').sort({ createdAt: -1 });
-  
+export const getAllUsers = asyncHandler(async (req, res) => {
+  let regularUsers = [];
+
+  if (req.user.role === 'superadmin') {
+    // Get all regular users
+    regularUsers = await User.find({}).select('-password').sort({ createdAt: -1 });
+  } else if (req.user.role === 'admin') {
+    // Find all distinct user IDs from requests assigned to this admin
+    const distinctUserIds = await Request.distinct('user', { assignedTo: req.user._id });
+    regularUsers = await User.find({ _id: { $in: distinctUserIds } }).select('-password').sort({ createdAt: -1 });
+  }
+
   // Get all admins
   const admins = await AdminUser.find({}).select('-password').sort({ createdAt: -1 });
   

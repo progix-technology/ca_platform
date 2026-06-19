@@ -300,6 +300,23 @@ export default function AdminDashboard() {
     }
   };
 
+  const updateRequestPrice = async (requestId, proposedPrice) => {
+    try {
+      const response = await requestAPI.updatePrice(requestId, { proposedPrice });
+      const updatedRequest = response.data?.data?.request;
+      setRequests((prev) => prev.map((request) => {
+        if (request._id !== requestId) return request;
+        return updatedRequest || { ...request, proposedPrice };
+      }));
+      toast.success('Price updated successfully');
+      return true;
+    } catch (error) {
+      const message = error.response?.data?.message || 'Failed to update price.';
+      toast.error(message);
+      return false;
+    }
+  };
+
   const addRequestComment = async (requestId, text, isInternal = false) => {
     setCommentingRequestId(requestId);
 
@@ -511,6 +528,7 @@ export default function AdminDashboard() {
                   onUpdateComment={updateRequestComment}
                   onDeleteComment={deleteRequestComment}
                   onSaveToCompletedList={saveCompletedRequestToList}
+                  onUpdatePrice={updateRequestPrice}
                   updatingRequestId={updatingRequestId}
                   acquiringRequestId={acquiringRequestId}
                   savingCompletedRequestId={savingCompletedRequestId}
